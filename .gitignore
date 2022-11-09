@@ -1,0 +1,7 @@
+root/
+venv/
+__pycache__/
+.idea/
+
+backup.py
+elory.db
