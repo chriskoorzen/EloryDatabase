@@ -23,6 +23,11 @@ class TagGroup(DatabaseObject):
     def __repr__(self):
         return self.name
 
+    def __eq__(self, other):
+        if other == self.name:
+            return True
+        return False
+
 
 class Tag(DatabaseObject):
 
@@ -33,13 +38,20 @@ class Tag(DatabaseObject):
     def __repr__(self):
         return f"{self.group} : {self.name}"
 
+    def __eq__(self, other):
+        if other == f"{self.group} : {self.name}":
+            return True
+        return False
 
 class File(DatabaseObject):
 
-    def __init__(self,  db_ID: int, name: str, path: str, tags: list):
+    def __init__(self,  db_ID: int, name: str, path: str, tags: list = []):
         super().__init__(db_ID, name)
         self.path = path
         self.tags = tags
+
+    def __repr__(self):
+        return self.path
 
     @staticmethod
     def digest(file):

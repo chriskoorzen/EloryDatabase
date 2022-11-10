@@ -13,8 +13,8 @@ tables = {"files":
                "FOREIGN KEY(tag_group)": "REFERENCES tag_groups(group_id) ON DELETE RESTRICT ON UPDATE CASCADE",
                "UNIQUE(tag_name, tag_group)": "ON CONFLICT FAIL"},
           "tagged_files_m2m":
-              {"tag": "INTEGER",
-               "file": "INTEGER",
+              {"tag": "INTEGER NOT NULL",
+               "file": "INTEGER NOT NULL",
                "FOREIGN KEY(tag)": "REFERENCES tags(tag_id) ON DELETE RESTRICT ON UPDATE CASCADE",
                "FOREIGN KEY(file)": "REFERENCES files(file_id) ON DELETE RESTRICT ON UPDATE CASCADE",
                "UNIQUE(tag, file)": "ON CONFLICT FAIL"}
