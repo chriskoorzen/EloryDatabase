@@ -2,6 +2,7 @@ import logging
 import sqlite3
 import os.path
 
+from databaseObjects import TagGroup, Tag, File
 from SQLTemplates import tableTemplate, tables
 
 
@@ -34,6 +35,23 @@ class TagManager:
 
     tags = []
     groups = []
+
+    @staticmethod
+    def _load_members():
+        # Get tag groups
+        Database.CURSOR.execute("SELECT group_id, group_name FROM tag_groups")
+        result = Database.CURSOR.fetchall()
+        for item in result:
+            TagManager.groups.append(TagGroup(item[0], item[1]))
+        logging.info(f"{len(TagManager.groups)} Tag groups loaded...")
+
+        # Get tags
+        for item in TagManager.groups:
+            Database.CURSOR.execute(f"SELECT tag_id, tag_name FROM tags WHERE tag_group={item.db_id}")
+            result = Database.CURSOR.fetchall()
+            for tag in result:
+                TagManager.tags.append(Tag(tag[0], tag[1], item))
+        logging.info(f"{len(TagManager.tags)} Tags loaded...")
 
     @staticmethod
     def newGroup(name):
@@ -86,6 +104,7 @@ class Database:
             logging.info(f"Connected to database '{path}'")
         except sqlite3.DatabaseError:
             logging.critical(f"'{path}' is not a valid sqlite3 database. Abort operation.")
+            # Database.CONNECTION.close()
             return
         if Database.CURSOR.fetchone()[0] == 0:
             # Database is valid but empty -> setup tables
@@ -100,6 +119,7 @@ class Database:
         fmt_tables = {x for x in tables.keys()}
         if not fmt_tables <= db_tables:             # if format tables is not present in (subset of) database...
             logging.critical(f"Required tables not present in database '{path}'. Abort operation.")
+            Database.CONNECTION.close()
             return
         # Check for column format mismatch
         for i in fmt_tables:
@@ -108,6 +128,7 @@ class Database:
             expected = {x for x in tables[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}    # TODO find better way to filter
             if not columns == expected:
                 logging.critical(f"Tables do not match required column formats in database '{path}'. Abort operation.")
+                Database.CONNECTION.close()
                 return
         logging.info(f"Table formats recognized in database '{path}'")
 
@@ -118,6 +139,11 @@ class Database:
         # Necessary settings for database
         Database.CURSOR.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
         Database.CONNECTION.commit()
+
+        # TODO load tags, tag groups, (and file stats?)
+        Database.TagManager._load_members()
+
+        # Database program ready
         logging.info(f"Database '{path}' ready for operation.")
 
     @staticmethod
@@ -129,3 +155,7 @@ class Database:
         #     print("One or more tables with the same name already exists.\nOperation Aborted.")
         pass
 
+    @staticmethod
+    def closeDB():
+        # TODO close connection and purge objects from Managers (refresh and ready for new connection)
+        pass

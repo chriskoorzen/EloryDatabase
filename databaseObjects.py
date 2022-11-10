@@ -13,9 +13,12 @@ class DatabaseObject:
 
 class TagGroup(DatabaseObject):
 
-    def __init__(self,  db_ID: int, name: str, tags: list):
+    def __init__(self,  db_ID: int, name: str, tags: list = []):
         super().__init__(db_ID, name)
         self.tags = tags
+
+    def __repr__(self):
+        return self.name
 
 
 class Tag(DatabaseObject):
@@ -23,6 +26,9 @@ class Tag(DatabaseObject):
     def __init__(self,  db_ID: int, name: str, group: TagGroup):
         super().__init__(db_ID, name)
         self.group = group
+
+    def __repr__(self):
+        return f"{self.group} : {self.name}"
 
 
 class File(DatabaseObject):
