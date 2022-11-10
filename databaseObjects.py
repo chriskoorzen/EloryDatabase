@@ -1,6 +1,9 @@
 """
 Represent objects from database. No CRUD operations affecting the database may take place within these classes
 """
+import hashlib
+import os.path
+import logging
 
 
 class DatabaseObject:
@@ -43,8 +46,17 @@ class File(DatabaseObject):
         """Return a unique hash code of a given file.
 
         The return must be unique to the file itself, should be platform-agnostic and resilient to meta-data changes.
-        The goal is to identify a particular file (defined as a series of bits) regardless of its OS, underlying fs,
+        The goal is to identify a particular file (defined as a series of bits) regardless of the OS, underlying fs,
         or system architecture.
         """
-        pass
+        if not os.path.isfile(file):
+            logging.warning(f"{file} is not a valid file")
+            return
+        h = hashlib.md5()
+        b = bytearray(128*1024)
+        mv = memoryview(b)      # using memoryview, we can slice a buffer without copying it
 
+        with open(file, 'rb', buffering=0) as file_obj:
+            while n := file_obj.readinto(mv):
+                h.update(mv[:n])
+        return h.hexdigest()
