@@ -5,11 +5,13 @@ import os.path
 from databaseObjects import TagGroup, Tag, File
 from SQLTemplates import tableTemplate, tables
 
+# TODO decide on error policy and propagation
+
 
 class FileManager:
 
     @staticmethod
-    def addFile(path):
+    def add_file(path):
         # TODO handle multiple files -> RETURN row_ids?
         if not os.path.isfile(path):
             logging.warning(f"File '{path}' does not exist.")
@@ -21,7 +23,7 @@ class FileManager:
         logging.info(f"Added file '{full_path}' to database")
 
     @staticmethod
-    def removeFile(path):
+    def remove_file(path):
         # TODO currently only accepts 'path' argument for file removal - poses problem when file path changes and
         # TODO a delete is desired -> currently it will fail and leave the row "stuck", until both path and id matches.
         if not os.path.isfile(path):
@@ -38,7 +40,7 @@ class FileManager:
         logging.info(f"Removed file '{full_path}' from database")
 
     @staticmethod
-    def addFileTag(path, tag: Tag):
+    def add_file_tag(path, tag: Tag):
         # TODO accept multiple tags?
         # TODO only matches file if path and id is same (problem)
         if not os.path.isfile(path):
@@ -51,7 +53,7 @@ class FileManager:
         logging.info(f"Tagged file '{path}' with tag '{tag}'")
 
     @staticmethod
-    def removeFileTag(path, tag):
+    def remove_file_tag(path, tag):
         # TODO accept multiple tags?
         # TODO only matches file if path and id is same (problem)
         if not os.path.isfile(path):
@@ -67,14 +69,15 @@ class FileManager:
         Database.CONNECTION.commit()
 
     @staticmethod
-    def getFilesfromTag(tag: Tag):
+    def get_files_from_tag(tag: Tag):
         Database.CURSOR.execute(f"SELECT file_id, file_hash_name, file_path FROM files WHERE file_id IN (SELECT file FROM tagged_files_m2m WHERE tag={tag.db_id})")
         result = Database.CURSOR.fetchall()
         logging.info(f"Retrieved {len(result)} files for tag '{tag}'")
         return [File(x[0], x[1], x[2]) for x in result]
 
-    # TODO add internal function for file verification and hashing
-    # TODO Utility function to integrity check file_path, while keeping file_hash consistent
+    # TODO add internal function for file verification and hashing, replacing duplicate code
+    # TODO Utility function to integrity check file_path, while keeping file_hash consistent ->
+    # TODO --> actually need better way to handle file identity and objects
 
 
 class TagManager:
@@ -100,7 +103,7 @@ class TagManager:
         logging.info(f"{len(TagManager.tags)} Tags loaded...")
 
     @staticmethod
-    def newGroup(name):
+    def new_group(name):
         Database.CURSOR.execute(f'INSERT INTO tag_groups (group_name) VALUES ("{name}")')
         Database.CONNECTION.commit()
         obj_id = Database.CURSOR.lastrowid
@@ -108,14 +111,14 @@ class TagManager:
         logging.info(f"New group '{name}' added to database")
 
     @staticmethod
-    def deleteGroup(name):
+    def delete_group(name):
         Database.CURSOR.execute(f'DELETE FROM tag_groups WHERE group_name="{name}"')
         Database.CONNECTION.commit()
         TagManager.groups.remove(name)
         logging.info(f"Group '{name}' removed from database")
 
     @staticmethod
-    def renameGroup(name, new_name):
+    def rename_group(name, new_name):
         Database.CURSOR.execute(f'UPDATE tag_groups SET group_name="{new_name}" WHERE group_name="{name}"')
         Database.CONNECTION.commit()
         ndx = TagManager.groups.index(name)
@@ -123,7 +126,7 @@ class TagManager:
         logging.info(f"Group '{name}' renamed to '{new_name}'")
 
     @staticmethod
-    def newTag(name: str, group: TagGroup):
+    def new_tag(name: str, group: TagGroup):
         Database.CURSOR.execute(f'INSERT INTO tags (tag_name, tag_group) VALUES ("{name}", {group.db_id})')
         Database.CONNECTION.commit()
         obj_id = Database.CURSOR.lastrowid
@@ -133,7 +136,7 @@ class TagManager:
         logging.info(f"New tag '{new_tag}' added to database")
 
     @staticmethod
-    def deleteTag(name: str, group: TagGroup):
+    def delete_tag(name: str, group: TagGroup):
         Database.CURSOR.execute(f'DELETE FROM tags WHERE tag_name="{name}" AND tag_group={group.db_id}')
         Database.CONNECTION.commit()
         tag = f"{group.name} : {name}"
@@ -142,7 +145,7 @@ class TagManager:
         logging.info(f"Tag '{tag}' removed from database")
 
     @staticmethod
-    def renameTag(name: str, group: TagGroup, new_name: str):
+    def rename_tag(name: str, group: TagGroup, new_name: str):
         Database.CURSOR.execute(f'UPDATE tags SET tag_name="{new_name}" WHERE tag_name="{name}" AND tag_group={group.db_id}')
         Database.CONNECTION.commit()
         tag = f"{group.name} : {name}"
@@ -161,7 +164,7 @@ class Database:
     TagManager = TagManager
 
     @staticmethod
-    def connectDB(path):
+    def connect_db(path):
 
         if not os.path.isfile(path):
             logging.warning(f"File does not exist. Creating new sqlite3 database at '{path}'")
@@ -177,12 +180,13 @@ class Database:
             logging.info(f"Connected to database '{path}'")
         except sqlite3.DatabaseError:
             logging.critical(f"'{path}' is not a valid sqlite3 database. Abort operation.")
-            # Database.CONNECTION.close()
+            Database.CONNECTION.close()
+            # raise sqlite3.DatabaseError       # TODO better to raise error instead? or let default error propagate?
             return
         if Database.CURSOR.fetchone()[0] == 0:
             # Database is valid but empty -> setup tables
             logging.info(f"Database '{path}' is empty...")
-            Database._createDB()
+            Database._create_db()
             Database.CONNECTION.commit()
             logging.info(f"Tables created for database '{path}'")
 
@@ -198,7 +202,8 @@ class Database:
         for i in fmt_tables:
             Database.CURSOR.execute(f"PRAGMA table_info({i});")
             columns = {x[1] for x in Database.CURSOR.fetchall()}
-            expected = {x for x in tables[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}    # TODO find better way to filter
+            # TODO find better way to filter -> the below method is fragile
+            expected = {x for x in tables[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}    
             if not columns == expected:
                 logging.critical(f"Tables do not match required column formats in database '{path}'. Abort operation.")
                 Database.CONNECTION.close()
@@ -220,15 +225,10 @@ class Database:
         logging.info(f"Database '{path}' ready for operation.")
 
     @staticmethod
-    def _createDB():
-        # try:
+    def _create_db():
         Database.CURSOR.executescript(tableTemplate)
-        # print("Tables successfully created")
-        # except sqlite3.OperationalError:
-        #     print("One or more tables with the same name already exists.\nOperation Aborted.")
-        pass
 
     @staticmethod
-    def closeDB():
+    def close_db():
         # TODO close connection and purge objects from Managers (refresh and ready for new connection)
         pass
