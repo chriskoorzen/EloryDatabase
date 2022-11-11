@@ -3,5 +3,5 @@ venv/
 __pycache__/
 .idea/
 
-backup.py
+old/
 database/
