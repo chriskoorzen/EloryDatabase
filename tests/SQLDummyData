@@ -1,0 +1,18 @@
+
+# Add Tag Groups
+INSERT INTO tag_groups (group_name) VALUES ("People");
+INSERT INTO tag_groups (group_name) VALUES ("Places");
+INSERT INTO tag_groups (group_name) VALUES ("Animals");
+
+# Add Tags
+INSERT INTO tags (tag_name, tag_group) VALUES ("Andrew Jackson", 1);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Jonas Hill", 1);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Darlene McArthur", 1);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Hannah Giles", 1);
+
+INSERT INTO tags (tag_name, tag_group) VALUES ("New York City", 2);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Pembleton Restaurant", 2);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Modena Vacation Home", 2);
+
+INSERT INTO tags (tag_name, tag_group) VALUES ("Cat", 3);
+INSERT INTO tags (tag_name, tag_group) VALUES ("Dog", 3);
