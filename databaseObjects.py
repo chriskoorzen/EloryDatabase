@@ -9,9 +9,8 @@ import logging
 class DatabaseObject:
     """Abstract class for objects retrieved from database"""
 
-    def __init__(self, db_id: int, name: str):
+    def __init__(self, db_id: int):
         self.db_id = db_id        # Primary key of object within database
-        self.name = name
         
     def __eq__(self, other):
         if other == (self.__class__, self.db_id):
@@ -24,33 +23,40 @@ class DatabaseObject:
 
 class TagGroup(DatabaseObject):
 
-    def __init__(self,  db_id: int, name: str, tags: list = []):
-        super().__init__(db_id, name)
-        self.tags = tags
+    def __init__(self,  db_id: int, name: str):
+        super().__init__(db_id)
+        self.name = name
+        self.tags = dict()
 
     def __repr__(self):
-        return self.name
+        final = f"<{self.__class__} : {self.name} : id {self.db_id} : tags {self.tags.keys()}>"
+        return final
 
 
 class Tag(DatabaseObject):
 
     def __init__(self,  db_id: int, name: str, group: TagGroup):
-        super().__init__(db_id, name)
+        super().__init__(db_id)
+        self.name = name
         self.group = group
+        self.files = dict()
 
     def __repr__(self):
-        return f"{self.group} : {self.name}"
+        final = f"<{self.__class__} : {self.name} : id {self.db_id} : files {self.files.keys()}>"
+        return final
 
 
 class File(DatabaseObject):
 
-    def __init__(self,  db_id: int, name: str, path: str, tags: list = []):
-        super().__init__(db_id, name)
+    def __init__(self,  db_id: int, path: str, hash_id: str):
+        super().__init__(db_id)
         self.path = path
-        self.tags = tags
+        self.hash_id = hash_id
+        self.tags = dict()
 
     def __repr__(self):
-        return self.path
+        final = f"<{self.__class__} : {self.hash_id} : id {self.db_id} : files {self.tags.keys()}>"
+        return final
 
     @staticmethod
     def digest(file):
