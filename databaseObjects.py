@@ -9,44 +9,43 @@ import logging
 class DatabaseObject:
     """Abstract class for objects retrieved from database"""
 
-    def __init__(self, db_ID: int, name: str):
-        self.db_id = db_ID        # Primary key of object within database
+    def __init__(self, db_id: int, name: str):
+        self.db_id = db_id        # Primary key of object within database
         self.name = name
+        
+    def __eq__(self, other):
+        if other == (self.__class__, self.db_id):
+            return True
+        return False
+
+    def __hash__(self):
+        return hash((self.__class__, self.db_id))
 
 
 class TagGroup(DatabaseObject):
 
-    def __init__(self,  db_ID: int, name: str, tags: list = []):
-        super().__init__(db_ID, name)
+    def __init__(self,  db_id: int, name: str, tags: list = []):
+        super().__init__(db_id, name)
         self.tags = tags
 
     def __repr__(self):
         return self.name
 
-    def __eq__(self, other):
-        if other == self.name:
-            return True
-        return False
-
 
 class Tag(DatabaseObject):
 
-    def __init__(self,  db_ID: int, name: str, group: TagGroup):
-        super().__init__(db_ID, name)
+    def __init__(self,  db_id: int, name: str, group: TagGroup):
+        super().__init__(db_id, name)
         self.group = group
 
     def __repr__(self):
         return f"{self.group} : {self.name}"
 
-    def __eq__(self, other):
-        if other == f"{self.group} : {self.name}":
-            return True
-        return False
 
 class File(DatabaseObject):
 
-    def __init__(self,  db_ID: int, name: str, path: str, tags: list = []):
-        super().__init__(db_ID, name)
+    def __init__(self,  db_id: int, name: str, path: str, tags: list = []):
+        super().__init__(db_id, name)
         self.path = path
         self.tags = tags
 
