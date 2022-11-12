@@ -6,6 +6,13 @@ from databaseObjects import TagGroup, Tag, File
 from SQLTemplates import tableTemplate, tables
 
 # TODO decide on error policy and propagation
+db_logger = logging.getLogger(__name__)
+db_logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter("[%(levelname)s] [%(name)s] %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(fmt)
+db_logger.addHandler(handler)
+db_logger.propagate = False
 
 
 class FileManager:
@@ -19,7 +26,7 @@ class FileManager:
         result = Database.CURSOR.fetchall()
         for item in result:
             FileManager.files[item[0]] = File(item[0], item[1], item[2])
-        logging.info(f"{len(FileManager.files)} Files loaded...")
+        db_logger.info(f"{len(FileManager.files)} Files loaded...")
 
     @staticmethod
     def _load_tag_data():
@@ -34,7 +41,7 @@ class FileManager:
     @staticmethod
     def add_file(path):
         if not os.path.isfile(path):
-            logging.warning(f"File '{path}' does not exist.")
+            db_logger.warning(f"File '{path}' does not exist.")
             return
         full_path = os.path.abspath(path)
         file_hash = File.digest(path)
@@ -42,7 +49,7 @@ class FileManager:
         Database.CURSOR.execute(f"INSERT INTO files (file_path, file_hash_name) VALUES ('{full_path}', '{file_hash}')")
         Database.CONNECTION.commit()
         FileManager.files[Database.CURSOR.lastrowid] = File(Database.CURSOR.lastrowid, full_path, file_hash)
-        logging.info(f"Added file '{full_path}' to database")
+        db_logger.info(f"Added file '{full_path}' to database")
 
     @staticmethod
     def remove_file(file_id):
@@ -54,7 +61,7 @@ class FileManager:
         for tag in f.tags.values():
             # purge from tags
             del tag.files[file_id]
-        logging.info(f"Removed file '{f.path}' from database")
+        db_logger.info(f"Removed file '{f.path}' from database")
         del f
 
     @staticmethod
@@ -64,14 +71,14 @@ class FileManager:
         Database.CONNECTION.commit()
         f.tags[tag.db_id] = tag
         tag.files[f.db_id] = f
-        logging.info(f"Tagged file '{f.path}' with tag '{tag.name}'")
+        db_logger.info(f"Tagged file '{f.path}' with tag '{tag.name}'")
 
     @staticmethod
     def remove_tag_from_file(file_id, tag: Tag):
         f = FileManager.files[file_id]
         Database.CURSOR.execute(f"DELETE FROM tagged_files_m2m WHERE tag={tag.db_id} AND file={f.db_id}")
         Database.CONNECTION.commit()
-        logging.info(f"Untagged file '{f.path}' from tag '{tag.name}'")
+        db_logger.info(f"Untagged file '{f.path}' from tag '{tag.name}'")
         del f.tags[tag.db_id]
         del tag.files[file_id]
 
@@ -90,7 +97,7 @@ class TagManager:
         result = Database.CURSOR.fetchall()
         for item in result:
             TagManager.groups[item[0]] = TagGroup(item[0], item[1])
-        logging.info(f"{len(TagManager.groups)} Tag groups loaded...")
+        db_logger.info(f"{len(TagManager.groups)} Tag groups loaded...")
 
         # Get tags
         for group_id in TagManager.groups.keys():
@@ -100,7 +107,7 @@ class TagManager:
                 tag = Tag(tag_attr[0], tag_attr[1], TagManager.groups[group_id])
                 TagManager.tags[tag.db_id] = tag
                 TagManager.groups[group_id].tags[tag.db_id] = tag
-        logging.info(f"{len(TagManager.tags)} Tags loaded...")
+        db_logger.info(f"{len(TagManager.tags)} Tags loaded...")
 
     @staticmethod
     def _load_file_data():
@@ -118,14 +125,14 @@ class TagManager:
         Database.CONNECTION.commit()
         obj_id = Database.CURSOR.lastrowid
         TagManager.groups[obj_id] = (TagGroup(obj_id, name))
-        logging.info(f"New group '{name}' added to database")
+        db_logger.info(f"New group '{name}' added to database")
 
     @staticmethod
     def delete_group(group_id):
         g = TagManager.groups.pop(group_id)
         Database.CURSOR.execute(f'DELETE FROM tag_groups WHERE group_id={g.db_id}')
         Database.CONNECTION.commit()
-        logging.info(f"Group '{g.name}' removed from database")
+        db_logger.info(f"Group '{g.name}' removed from database")
         del g
 
     @staticmethod
@@ -133,7 +140,7 @@ class TagManager:
         g = TagManager.groups[group_id]
         Database.CURSOR.execute(f'UPDATE tag_groups SET group_name="{new_name}" WHERE group_id={g.db_id}')
         Database.CONNECTION.commit()
-        logging.info(f"Group '{g.name}' renamed to '{new_name}'")
+        db_logger.info(f"Group '{g.name}' renamed to '{new_name}'")
         g.name = new_name
 
     @staticmethod
@@ -143,7 +150,7 @@ class TagManager:
         tag = Tag(Database.CURSOR.lastrowid, name, group)
         TagManager.tags[tag.db_id] = tag
         group.tags[tag.db_id] = tag
-        logging.info(f"New tag '{tag}' added to database")
+        db_logger.info(f"New tag '{tag}' added to database")
 
     @staticmethod
     def delete_tag(tag_id):
@@ -152,7 +159,7 @@ class TagManager:
         Database.CURSOR.execute(f'DELETE FROM tags WHERE tag_id={t.db_id} AND tag_group={t.group.db_id}')
         Database.CONNECTION.commit()
         t.group.tags.pop(t.db_id)
-        logging.info(f"Tag '{t}' removed from database")
+        db_logger.info(f"Tag '{t}' removed from database")
         del t
 
     @staticmethod
@@ -160,7 +167,7 @@ class TagManager:
         t = TagManager.tags[tag_id]
         Database.CURSOR.execute(f'UPDATE tags SET tag_name="{new_name}" WHERE tag_id={t.db_id}')
         Database.CONNECTION.commit()
-        logging.info(f"Tag '{t.name}' renamed to '{new_name}'")
+        db_logger.info(f"Tag '{t.name}' renamed to '{new_name}'")
         t.name = new_name
 
 
@@ -177,7 +184,8 @@ class Database:
     def connect_db(path):
 
         if not os.path.isfile(path):
-            logging.warning(f"File does not exist. Creating new sqlite3 database at '{path}'")
+            db_logger.warning(f"File '{path}' does not exist. Creating new sqlite3 database")
+            # sqlite3 default is to go ahead and create a file that does not already exist -> go ahead.
 
         # TODO differentiate between db name and absolute path - use set variables instead of supplied "path variable"
         Database.NAME = path
@@ -185,29 +193,24 @@ class Database:
         Database.CURSOR = Database.CONNECTION.cursor()
 
         # Check if database is valid -> if so, is it empty?
-        try:
-            Database.CURSOR.execute("PRAGMA schema_version")
-            logging.info(f"Connected to database '{path}'")
-        except sqlite3.DatabaseError:
-            logging.critical(f"'{path}' is not a valid sqlite3 database. Abort operation.")
-            Database.CONNECTION.close()
-            # raise sqlite3.DatabaseError       # TODO better to raise error instead? or let default error propagate?
-            return
+        Database.CURSOR.execute("PRAGMA schema_version")    # Will fail with 'sqlite3.DatabaseError' if invalid file
+        db_logger.info(f"Connected to database '{path}'")
         if Database.CURSOR.fetchone()[0] == 0:
             # Database is valid but empty -> setup tables
-            logging.info(f"Database '{path}' is empty...")
+            db_logger.warning(f"Database '{path}' is empty... Auto creating tables...")
             Database._create_db()
             Database.CONNECTION.commit()
-            logging.info(f"Tables created for database '{path}'")
+            db_logger.info(f"Tables created for database '{path}'")
 
         # Check if needed tables are present
         Database.CURSOR.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%';")
         db_tables = {x[0] for x in Database.CURSOR.fetchall()}
         fmt_tables = {x for x in tables.keys()}
         if not fmt_tables <= db_tables:             # if format tables is not present in (subset of) database...
-            logging.critical(f"Required tables not present in database '{path}'. Abort operation.")
+            errmsg = "Required tables not present in database"
+            db_logger.critical(f"{errmsg} '{path}'. Abort operation.")
             Database.CONNECTION.close()
-            return
+            raise sqlite3.DatabaseError(errmsg)
         # Check for column format mismatch
         for i in fmt_tables:
             Database.CURSOR.execute(f"PRAGMA table_info({i});")
@@ -215,14 +218,15 @@ class Database:
             # TODO find better way to filter -> the below method is fragile
             expected = {x for x in tables[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}    
             if not columns == expected:
-                logging.critical(f"Tables do not match required column formats in database '{path}'. Abort operation.")
+                errmsg = "Tables exist in database but do not match the required column formats"
+                db_logger.critical(f"{errmsg} '{path}'. Abort operation.")
                 Database.CONNECTION.close()
-                return
-        logging.info(f"Table formats recognized in database '{path}'")
+                raise sqlite3.DatabaseError(errmsg)
+        db_logger.info(f"Table formats recognized in database '{path}'")
 
         # Warn if foreign tables are present
         if len(db_tables) > len(fmt_tables):
-            logging.warning(f"Additional unrecognized tables detected in database '{path}'")
+            db_logger.warning(f"Additional unrecognized tables detected in database '{path}'")
 
         # Necessary settings for database
         Database.CURSOR.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
@@ -235,7 +239,7 @@ class Database:
         Database.FileManager._load_tag_data()
 
         # Database program ready
-        logging.info(f"Database '{path}' ready for operation.")
+        db_logger.info(f"Database '{path}' ready for operation.")
 
     @staticmethod
     def _create_db():
@@ -243,10 +247,10 @@ class Database:
 
     @staticmethod
     def close_db():
-        logging.info(f"Getting ready to close database '{Database.NAME}' ...")
+        db_logger.info(f"Getting ready to close database '{Database.NAME}' ...")
         TagManager.tags.clear()
         TagManager.groups.clear()
         FileManager.files.clear()
-        logging.info(f"Objects cleared from memory ...")
+        db_logger.info(f"Objects cleared from memory ...")
         Database.CONNECTION.close()
-        logging.info(f"Database '{Database.NAME}' closed and ready for new connection.")
+        db_logger.info(f"Database '{Database.NAME}' closed and ready for new connection.")
