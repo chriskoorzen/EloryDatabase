@@ -1,2 +1,29 @@
 #: kivy 2.1.0
+# Class definition as ::=      < CustomClass @ BaseClass >
+# Class instantiation as ::=   Class:
 
+<NavigationPane@RelativeLayout>:
+    Label:
+        text: "NavigationPane"
+
+<DisplayPane@RelativeLayout>:
+    Label:
+        canvas.before:
+            Color:
+                rgba: 0, 1, 0, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        text: "DisplayPane"
+
+<TagPane>:
+    # Label:
+    #     text: "TagPane"
+
+<RootWidget>:
+    NavigationPane:
+        size_hint_x: 0.28
+    DisplayPane:
+        size_hint_x: 0.44
+    TagPane:
+        size_hint_x: 0.28
