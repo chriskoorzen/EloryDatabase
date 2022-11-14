@@ -120,23 +120,34 @@ class TagManager:
                 TagManager.tags[tag_id].files[file_id] = FileManager.files[file_id]
 
     @staticmethod
+    def _sanitize_names(name):
+        if name == '' or name == ' ':  # TODO do not let database accept empty or funny strings. Sanitize for sql injection
+            errmsg = "Name cannot be empty or special characters. Alpha-Numeric only"
+            raise sqlite3.IntegrityError(errmsg)
+
+    @staticmethod
     def new_group(name):
+        TagManager._sanitize_names(name)
         Database.CURSOR.execute(f'INSERT INTO tag_groups (group_name) VALUES ("{name}")')
         Database.CONNECTION.commit()
         obj_id = Database.CURSOR.lastrowid
-        TagManager.groups[obj_id] = (TagGroup(obj_id, name))
+        new_group = TagGroup(obj_id, name)
+        TagManager.groups[obj_id] = (new_group)
         db_logger.info(f"New group '{name}' added to database")
+        return new_group
 
     @staticmethod
     def delete_group(group_id):
-        g = TagManager.groups.pop(group_id)
+        g = TagManager.groups[group_id]
         Database.CURSOR.execute(f'DELETE FROM tag_groups WHERE group_id={g.db_id}')
         Database.CONNECTION.commit()
+        TagManager.groups.pop(group_id)
         db_logger.info(f"Group '{g.name}' removed from database")
         del g
 
     @staticmethod
     def rename_group(group_id, new_name):
+        TagManager._sanitize_names(new_name)
         g = TagManager.groups[group_id]
         Database.CURSOR.execute(f'UPDATE tag_groups SET group_name="{new_name}" WHERE group_id={g.db_id}')
         Database.CONNECTION.commit()
@@ -145,6 +156,7 @@ class TagManager:
 
     @staticmethod
     def new_tag(name: str, group: TagGroup):
+        TagManager._sanitize_names(name)
         Database.CURSOR.execute(f'INSERT INTO tags (tag_name, tag_group) VALUES ("{name}", {group.db_id})')
         Database.CONNECTION.commit()
         tag = Tag(Database.CURSOR.lastrowid, name, group)
@@ -156,15 +168,17 @@ class TagManager:
     @staticmethod
     def delete_tag(tag_id):
         # Must not be able to delete tags attached to files
-        t = TagManager.tags.pop(tag_id)
+        t = TagManager.tags[tag_id]
         Database.CURSOR.execute(f'DELETE FROM tags WHERE tag_id={t.db_id} AND tag_group={t.group.db_id}')
         Database.CONNECTION.commit()
+        TagManager.tags.pop(tag_id)
         t.group.tags.pop(t.db_id)
         db_logger.info(f"Tag '{t}' removed from database")
         del t
 
     @staticmethod
     def rename_tag(tag_id, new_name: str):
+        TagManager._sanitize_names(new_name)
         t = TagManager.tags[tag_id]
         Database.CURSOR.execute(f'UPDATE tags SET tag_name="{new_name}" WHERE tag_id={t.db_id}')
         Database.CONNECTION.commit()
