@@ -5,6 +5,7 @@
 <NavigationPane@RelativeLayout>:
     Label:
         text: "NavigationPane"
+        halign: "right"
 
 <DisplayPane@RelativeLayout>:
     Label:
@@ -20,10 +21,25 @@
     # Label:
     #     text: "TagPane"
 
+<OptionsBar@Label>:
+    canvas.before:
+        Color:
+            rgba: 0, 0.2, 0.5, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    text: "OptionsBar"
+
 <RootWidget>:
-    NavigationPane:
-        size_hint_x: 0.28
-    DisplayPane:
-        size_hint_x: 0.44
-    TagPane:
-        size_hint_x: 0.28
+    BoxLayout:
+        orientation: "vertical"
+        OptionsBar:
+            size_hint_y: 0.06
+        BoxLayout:
+            # size_hint_y: 0.94
+            NavigationPane:
+                size_hint_x: 0.28
+            DisplayPane:
+                size_hint_x: 0.44
+            TagPane:
+                size_hint_x: 0.28
