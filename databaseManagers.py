@@ -151,6 +151,7 @@ class TagManager:
         TagManager.tags[tag.db_id] = tag
         group.tags[tag.db_id] = tag
         db_logger.info(f"New tag '{tag}' added to database")
+        return tag
 
     @staticmethod
     def delete_tag(tag_id):
