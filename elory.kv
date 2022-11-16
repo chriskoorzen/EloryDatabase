@@ -2,10 +2,9 @@
 # Class definition as ::=      < CustomClass @ BaseClass >
 # Class instantiation as ::=   Class:
 
-<NavigationPane@RelativeLayout>:
-    Label:
-        text: "NavigationPane"
-        halign: "right"
+<FileNavigationPane>:
+    # Label:
+    #     text: "NavigationPane"
 
 <DisplayPane@RelativeLayout>:
     Label:
@@ -37,9 +36,9 @@
             size_hint_y: 0.06
         BoxLayout:
             # size_hint_y: 0.94
-            NavigationPane:
-                size_hint_x: 0.28
+            FileNavigationPane:
+                size_hint_x: 0.32
             DisplayPane:
                 size_hint_x: 0.44
             TagPane:
-                size_hint_x: 0.28
+                size_hint_x: 0.24
