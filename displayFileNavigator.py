@@ -2,7 +2,7 @@ import os
 from collections import deque
 
 from kivy.graphics import Color, Rectangle
-from kivy.properties import ObjectProperty, BooleanProperty
+from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.filechooser import FileChooserListView, FileChooserIconView
@@ -19,10 +19,11 @@ from databaseManagers import Database as db
 
 
 class FileNavigationPane(RelativeLayout):
-    # system_files_active = BooleanProperty(True)         # On False, switch to Db file view
+    active_selected_file = StringProperty()
 
     def __init__(self, **kwargs):
         super(FileNavigationPane, self).__init__(**kwargs)
+        # self.bind(active_selected_file=throwaway)
         # Top Level View Options
         self.add_widget(Label(text="File Navigator", size_hint=(1, 0.08), pos_hint={"top": 1}))
         view_options = BoxLayout(size_hint=(1, 0.06), pos_hint={"top": 0.92}, orientation='horizontal')
@@ -39,7 +40,8 @@ class FileNavigationPane(RelativeLayout):
         # sys_viewport.add_widget(self.sys_tree)
         # sys_box.add_widget(sys_viewport)
         # self.system_files_view = sys_box
-        self.system_files_view = FileChooserListView(size_hint=(1, 0.85), pos_hint={"top": 0.85}, path=str(Path.home()))
+        self.system_files_view = FileChooserListView(size_hint=(1, 0.84), pos_hint={"top": 0.85}, path=str(Path.home()))
+        self.system_files_view.bind(selection=self.set_active_image)
 
         # Database Files Tree View
         db_box = RelativeLayout(size_hint=(1, 0.85), pos_hint={"top": 0.85})
@@ -54,6 +56,7 @@ class FileNavigationPane(RelativeLayout):
         db_viewport.add_widget(self.db_tree)
         db_box.add_widget(db_viewport)
         self.database_files_view = db_box
+        self.db_tree.bind(selected_node=self.set_active_image)
 
         self.add_widget(self.system_files_view)     # Set default view on System Files Pane
 
@@ -64,6 +67,12 @@ class FileNavigationPane(RelativeLayout):
         # a = TreeViewLabel(text="My_name")
         # b = TreeViewLabel(text="My_name")
         # print(a==b)   # False  -> implement own __eq__ method in class. __hash__
+
+    def set_active_image(self, *args):
+        if type(args[0]) == FileChooserListView:
+            self.active_selected_file = args[1][0]
+        if type(args[0]) == TreeView:
+            self.active_selected_file = args[1].db_object.path
 
     def set_system_file_view(self, *args):
         if args[0].state == "normal":
@@ -149,3 +158,7 @@ class FileNode(TreeViewNode, BoxLayout):
         descript = Label(text=self.db_object.name, halign="left", valign="center")
         descript.bind(size=descript.setter("text_size"))
         self.add_widget(descript)
+
+
+def throwaway(*args):
+    print("function executed", *args)

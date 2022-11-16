@@ -6,15 +6,15 @@
     # Label:
     #     text: "NavigationPane"
 
-<DisplayPane@RelativeLayout>:
-    Label:
-        canvas.before:
-            Color:
-                rgba: 0, 1, 0, 1
-            Rectangle:
-                pos: self.pos
-                size: self.size
-        text: "DisplayPane"
+<FileDisplayPane>:
+    # Label:
+    #     canvas.before:
+    #         Color:
+    #             rgba: 0.2, 0.2, 0.2, 0.5
+    #         Rectangle:
+    #             pos: self.pos
+    #             size: self.size
+    #     text: "DisplayPane"
 
 <TagPane>:
     # Label:
@@ -30,15 +30,14 @@
     text: "OptionsBar"
 
 <RootWidget>:
+    orientation: "vertical"
+    OptionsBar:
+        size_hint_y: 0.06
     BoxLayout:
-        orientation: "vertical"
-        OptionsBar:
-            size_hint_y: 0.06
-        BoxLayout:
-            # size_hint_y: 0.94
-            FileNavigationPane:
-                size_hint_x: 0.32
-            DisplayPane:
-                size_hint_x: 0.44
-            TagPane:
-                size_hint_x: 0.24
+        # size_hint_y: 0.94
+        FileNavigationPane:
+            size_hint_x: 0.32
+        FileDisplayPane:
+            size_hint_x: 0.44
+        TagPane:
+            size_hint_x: 0.24
