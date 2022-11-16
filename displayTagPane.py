@@ -16,7 +16,7 @@ from databaseManagers import Database as db
 class TagPane(RelativeLayout):
 
     def __init__(self, **kwargs):
-        super(RelativeLayout, self).__init__(**kwargs)
+        super(TagPane, self).__init__(**kwargs)
         # Create Layout
         self.add_widget(Label(text="Tag Manager", size_hint=(1, 0.08), pos_hint={"top": 1}))
         options_box = BoxLayout(pos_hint={"top": 0.92}, size_hint=(1, 0.06), orientation="horizontal")
@@ -91,6 +91,8 @@ class TagPane(RelativeLayout):
     def delete_group(self, *args):      # TODO prevent the deletion of a group if even one tag has links?
 
         def get_selection_and_del(*arg):
+            if del_options.selected_node is None:       # TODO Catch None type error
+                return True
             group_node, group = reference[del_options.selected_node.ids["db_id"]]
             tag_nodes = [x for x in group_node.nodes]
             for tag_node in tag_nodes:
@@ -200,7 +202,7 @@ class TagPane(RelativeLayout):
 class GroupNode(TreeViewNode, BoxLayout):
 
     def __init__(self, db_object, add_tag_func, del_tag_func, **kwargs):
-        super(BoxLayout, self).__init__(**kwargs)
+        super(GroupNode, self).__init__(**kwargs)
         self.db_object = db_object
         self.orientation = "horizontal"
         self.height = 36        # Default TreeNode size is 28
@@ -215,7 +217,7 @@ class GroupNode(TreeViewNode, BoxLayout):
 
         self.add_widget(Button(text=" + ", on_press=add_tag_func, size_hint_x=0.2))
         self.add_widget(Button(text=" - ", on_press=del_tag_func, size_hint_x=0.2))
-        super(TreeViewNode, self).__init__(**kwargs)
+        # super(TreeViewNode, self).__init__(**kwargs)
         self.no_selection = True
 
     def _update_background(self, instance, value):
@@ -227,7 +229,7 @@ class GroupNode(TreeViewNode, BoxLayout):
 class TagNode(TreeViewNode, BoxLayout):
 
     def __init__(self, db_object, **kwargs):
-        super(BoxLayout, self).__init__(**kwargs)
+        super(TagNode, self).__init__(**kwargs)
         # Implement Double Click functionality
         self.register_event_type('on_double_press')
         if kwargs.get("on_double_press") is not None:
@@ -240,7 +242,7 @@ class TagNode(TreeViewNode, BoxLayout):
         descript.bind(size=descript.setter("text_size"))
         self.add_widget(descript)
 
-        super(TreeViewNode, self).__init__(**kwargs)
+        # super(TreeViewNode, self).__init__(**kwargs)
 
     # Implement Double Click functionality
     def on_touch_down(self, touch):

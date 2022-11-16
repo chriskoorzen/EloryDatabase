@@ -2,7 +2,7 @@
 Represent objects from database. No CRUD operations affecting the database may take place within these classes
 """
 import hashlib
-import os.path
+from os.path import basename, isfile
 import logging
 
 
@@ -51,6 +51,7 @@ class File(DatabaseObject):
     def __init__(self,  db_id: int, path: str, hash_id: str):
         super().__init__(db_id)
         self.path = path
+        self.name = basename(self.path)
         self.hash_id = hash_id
         self.tags = dict()
 
@@ -66,7 +67,7 @@ class File(DatabaseObject):
         The goal is to identify a particular file (defined as a series of bits) regardless of the OS, underlying fs,
         or system architecture.
         """
-        if not os.path.isfile(file):
+        if not isfile(file):
             logging.warning(f"{file} is not a valid file")
             return
         h = hashlib.md5()
