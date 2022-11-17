@@ -48,8 +48,10 @@ class FileManager:
 
         Database.CURSOR.execute(f"INSERT INTO files (file_path, file_hash_name) VALUES ('{full_path}', '{file_hash}')")
         Database.CONNECTION.commit()
-        FileManager.files[Database.CURSOR.lastrowid] = File(Database.CURSOR.lastrowid, full_path, file_hash)
+        new_file = File(Database.CURSOR.lastrowid, full_path, file_hash)
+        FileManager.files[Database.CURSOR.lastrowid] = new_file
         db_logger.info(f"Added file '{full_path}' to database")
+        return new_file
 
     @staticmethod
     def remove_file(file_id):
