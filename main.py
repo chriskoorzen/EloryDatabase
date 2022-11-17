@@ -32,7 +32,7 @@ class EloryApp(App):
     # Dirty method of passing parameters between classes -> ideally do in build() method
     def on_start(self):
         # print(self.root.children[0].children[1])
-        callback = self.root.children[0].children[1].set_active_image               # FileDisplayPane
+        callback = self.root.children[0].children[1].set_active_object               # FileDisplayPane
         self.root.children[0].children[2].bind(active_selected_file=callback)       # FileNavigationPane
         pass
 
