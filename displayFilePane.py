@@ -29,7 +29,6 @@ class FileDisplayPane(RelativeLayout):
 
     def set_active_object(self, *args):
         # 2nd parameter is object with 'path' member
-        # print(*args)
         file_object = args[1]
         self.file_display.source = file_object.path     # Set Image path
 
@@ -41,6 +40,15 @@ class FileDisplayPane(RelativeLayout):
                 display_tag = Button(text=f"{tag.group.name}: {tag.name}", size_hint=(None, None), padding=(12, 12))
                 display_tag.bind(texture_size=display_tag.setter("size"))    # Bind widget size directly to texture size
                 self.tag_display.add_widget(display_tag)
+
+    def get_selected_tag(self, *args):
+        print("Got tag ->", *args)
+        tag = args[1].db_object
+        # TODO define custom widget for Tag displays -> click func to remove or edit from current tagged file
+        display_tag = Button(text=f"{tag.group.name}: {tag.name}", size_hint=(None, None), padding=(12, 12))
+        display_tag.bind(texture_size=display_tag.setter("size"))  # Bind widget size directly to texture size
+        # TODO need to be able to uniquely identify displayTags, so that we don't add it multiple times
+        self.tag_display.add_widget(display_tag)
 
     def update_img_background(self, *args):
         self.file_display.rect.pos = self.file_display.pos

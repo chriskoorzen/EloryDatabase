@@ -4,7 +4,7 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.relativelayout import RelativeLayout
-from kivy.properties import DictProperty
+from kivy.properties import DictProperty, ObjectProperty
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
 from kivy.uix.treeview import TreeView, TreeViewNode, TreeViewLabel
@@ -14,6 +14,7 @@ from databaseManagers import Database as db
 
 
 class TagPane(RelativeLayout):
+    selected_tag = ObjectProperty()
 
     def __init__(self, **kwargs):
         super(TagPane, self).__init__(**kwargs)
@@ -41,13 +42,15 @@ class TagPane(RelativeLayout):
             group_node = GroupNode(db_object=item, add_tag_func=self.add_tag, del_tag_func=self.delete_tag)
             self.tree_root.add_node(group_node)
             for child in item.tags.values():
-                tag_node = TagNode(db_object=child, on_double_press=self.test_print)
+                tag_node = TagNode(db_object=child, on_double_press=self.set_selected_tag)
                 self.tree_root.add_node(tag_node, parent=group_node)
             self.tree_root.toggle_node(group_node)      # Let default view be open nodes
 
-    def test_print(*args):
-        print(*args)
-        print("Double Clicked")
+    def set_selected_tag(self, *args):
+        # First arg is TagNode object
+        # print(*args)
+        # print("Double Clicked")
+        self.selected_tag = args[0]
 
     def add_group(self, *args):
 
@@ -138,7 +141,7 @@ class TagPane(RelativeLayout):
         acceptBtn.bind(on_release=popup.dismiss)
         popup.open()
 
-    def add_tag(self, *args):
+    def add_tag(self, *args):       # TODO partition out the "add new Tag node" and "create new Tag" functions
         # For use with the GroupNode button
         db_obj_group = args[0].parent.db_object
         parent_node = args[0].parent
@@ -155,7 +158,7 @@ class TagPane(RelativeLayout):
                 popup.open()
                 return
             self.tree_root.add_node(
-                TagNode(db_object=new_tag, on_double_press=self.test_print),
+                TagNode(db_object=new_tag, on_double_press=self.set_selected_tag),
                 parent_node
             )
         user_input = TextInput(hint_text="Your tag name here", multiline=False)

@@ -31,9 +31,15 @@ class EloryApp(App):
 
     # Dirty method of passing parameters between classes -> ideally do in build() method
     def on_start(self):
-        # print(self.root.children[0].children[1])
-        callback = self.root.children[0].children[1].set_active_object               # FileDisplayPane
+        # print(self.root.children[0].children)
+        # Child[0] = TagPane, Child[1] = FileDisplayPane, Child[2] = FileNavigationPane
+        # Pass FileObject to Display Pane
+        callback = self.root.children[0].children[1].set_active_object              # FileDisplayPane
         self.root.children[0].children[2].bind(active_selected_file=callback)       # FileNavigationPane
+
+        # Pass TagObject to DisplayPane
+        callback = self.root.children[0].children[1].get_selected_tag               # FileDisplayPane
+        self.root.children[0].children[0].bind(selected_tag=callback)               # TagPane
         pass
 
 
