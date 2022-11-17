@@ -63,8 +63,8 @@ class FileManager:
         for tag in f.tags.values():
             # purge from tags
             del tag.files[file_id]
+        del FileManager.files[file_id]
         db_logger.info(f"Removed file '{f.path}' from database")
-        del f
 
     @staticmethod
     def add_tag_to_file(file_id, tag: Tag):
