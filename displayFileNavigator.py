@@ -2,7 +2,7 @@ import os
 from collections import deque
 
 from kivy.graphics import Color, Rectangle
-from kivy.properties import ObjectProperty, BooleanProperty, StringProperty
+from kivy.properties import ObjectProperty, BooleanProperty, StringProperty, DictProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.filechooser import FileChooserListView, FileChooserIconView
@@ -16,10 +16,14 @@ from kivy.uix.widget import Widget
 from pathlib import Path
 
 from databaseManagers import Database as db
+from sqlite3 import IntegrityError
+DEFAULT_SYSTEM_FILE = "/home/student/PycharmProjects/elory"  # str(Path.home())     # Where system view opens by default
+# TODO Have consistency across database and system views in respect to tagged files -> a selected file on system view
+# TODO   should still reflect its tags. (Will possible have to tweak FileChooser classes)
 
 
 class FileNavigationPane(RelativeLayout):
-    active_selected_file = StringProperty()
+    active_selected_file = ObjectProperty()         # TODO This property really belongs in the displayFilePane
 
     def __init__(self, **kwargs):
         super(FileNavigationPane, self).__init__(**kwargs)
@@ -31,7 +35,7 @@ class FileNavigationPane(RelativeLayout):
         view_options.add_widget(ToggleButton(text="Database Files", group="view_options", on_press=self.set_database_file_view))
         self.add_widget(view_options)
 
-        # System Files Tree View
+        # System Files Tree View    -> Roll own over FileChooser
         # sys_box = RelativeLayout(size_hint=(1, 0.85), pos_hint={"top": 0.85})
         # sys_box.add_widget(Button(text="Select folder..", size_hint=(0.4, 0.08), pos_hint={"top": 1}, on_press=self.select_folder,))
         # self.sys_tree = TreeView(root_options={"text": "System Files", "no_selection": True}, size_hint=(1, None))
@@ -40,41 +44,67 @@ class FileNavigationPane(RelativeLayout):
         # sys_viewport.add_widget(self.sys_tree)
         # sys_box.add_widget(sys_viewport)
         # self.system_files_view = sys_box
-        self.system_files_view = FileChooserListView(size_hint=(1, 0.84), pos_hint={"top": 0.85}, path=str(Path.home()))
-        self.system_files_view.bind(selection=self.set_active_image)
+        self.system_files_view = FileChooserListView(size_hint=(1, 0.84), pos_hint={"top": 0.85},
+                                                     path=DEFAULT_SYSTEM_FILE, on_submit=self.add_system_file_to_db)
+        self.system_files_view.bind(selection=self.set_active_file_object)
+        # self.current_system_file_nodes = dict()  # TODO not used currently
 
         # Database Files Tree View
         db_box = RelativeLayout(size_hint=(1, 0.85), pos_hint={"top": 0.85})
-        sort_options = BoxLayout(size_hint=(1, 0.08), pos_hint={"top": 1}, orientation='horizontal')
-        sort_options.add_widget(Label(text="Sort by : ", size_hint=(0.4, 1)))
-        sort_options.add_widget(Button(text="Folders", size_hint=(0.3, 1)))         # Let db_tree display by folder
-        sort_options.add_widget(Button(text="Tags", size_hint=(0.3, 1)))            # Let db_tree display by tag
-        db_box.add_widget(sort_options)
-        self.db_tree = TreeView(root_options={"text": "Database Files", "no_selection": True}, size_hint=(1, None))
+        self.db_tree = DatabaseTree(root_options={"text": "Database Files", "no_selection": True},
+                                    size_hint=(1, None),
+                                    indent_level=10)
         self.db_tree.bind(minimum_height=self.db_tree.setter('height'))  # Auto update on height change
-        db_viewport = ScrollView(pos_hint={"top": 0.9}, do_scroll_x=False, size_hint_y=0.79, scroll_type=["bars"])
+        db_box.add_widget(Button(text="Remove file", size_hint=(0.4, 0.06),
+                                 pos_hint={"top": 1, "right": 0.45}, on_press=self.remove_file_from_db))
+        file_options = BoxLayout(size_hint=(0.5, 0.06), pos_hint={"top": 1, "right": 1}, orientation='horizontal')
+        file_options.add_widget(Label(text="Sort by : ", size_hint=(0.4, 1)))
+        file_options.add_widget(Button(text="Folders", size_hint=(0.3, 1)))  # , on_press=self.db_tree.sort_by_folder))
+        file_options.add_widget(Button(text="Tags", size_hint=(0.3, 1)))  # , on_press=self.db_tree.sort_by_tags))
+        db_box.add_widget(file_options)
+
+        db_viewport = ScrollView(pos_hint={"top": 0.92}, do_scroll_x=False, size_hint_y=0.79, scroll_type=["bars"])
         db_viewport.add_widget(self.db_tree)
         db_box.add_widget(db_viewport)
         self.database_files_view = db_box
-        self.db_tree.bind(selected_node=self.set_active_image)
+        self.db_tree.bind(selected_node=self.set_active_file_object)
 
-        self.add_widget(self.system_files_view)     # Set default view on System Files Pane
+        # Init db Tree
+        for file in db.FileManager.files.values():
+            self.db_tree.add_file_node(file.path, file)
 
-        self.database_file_nodes = dict()
-        self.current_system_file_nodes = dict()
+        self.add_widget(self.system_files_view)  # Start default view on System Files Pane
 
-        self._init_db_tree(list(self._parse_db_files().items()))
-        # a = TreeViewLabel(text="My_name")
-        # b = TreeViewLabel(text="My_name")
-        # print(a==b)   # False  -> implement own __eq__ method in class. __hash__
+    def add_system_file_to_db(self, *args):
+        # with dir_select to False, this should always only pass in files
+        file_path = args[1][0]
+        try:
+            new_file = db.FileManager.add_file(file_path)   # Create new file in database -> this may throw errors
+        except IntegrityError as errmsg:
+            print(errmsg)
+            print("Cannot add this file to database")
+            return
+        self.db_tree.add_file_node(file_path, new_file)
 
-    def set_active_image(self, *args):
+    def remove_file_from_db(self, *args):
+        if self.db_tree.selected_node is None:
+            return
+        self.db_tree.remove_file_node(self.db_tree.selected_node)
+
+    def set_active_file_object(self, *args):
         if type(args[0]) == FileChooserListView:
-            self.active_selected_file = args[1][0]
-        if type(args[0]) == TreeView:
-            self.active_selected_file = args[1].db_object.path
+            # "bug": FileChooser gives an empty list when dir select is False and clicking between files and dirs
+            if args[1] == []:
+                return
+            path_string = args[1][0]
+            # Create 'anon' object on the fly with 'path' member
+            self.active_selected_file = type('anon', (object, ), {"path": path_string})   # Pass 'anon' object
+        if type(args[0]) == DatabaseTree:
+            self.active_selected_file = args[1].db_object   # Pass db object itself
 
     def set_system_file_view(self, *args):
+        # TODO unselect the active selected object when switching panes -> otherwise clicking has no effect
+        # TODO this func and 'set_database_file_view' could probably be one
         if args[0].state == "normal":
             args[0].state = "down"
             return
@@ -88,8 +118,7 @@ class FileNavigationPane(RelativeLayout):
         self.remove_widget(self.system_files_view)
         self.add_widget(self.database_files_view)
 
-    def select_folder(self, *args):
-
+    def select_folder(self, *args):     # TODO not used currently
         def get_selection(*arg):
             print(user_selection.selection)
             return user_selection.selection
@@ -110,42 +139,6 @@ class FileNavigationPane(RelativeLayout):
         acceptBtn.bind(on_release=popup.dismiss)
         popup.open()
 
-    def _init_db_tree(self, list_structure_dict, parent=None):
-
-        for key, value in list_structure_dict:
-            if isinstance(value, type({})):
-                dir_label = TreeViewLabel(text=key, no_selection=True)
-                self.db_tree.add_node(dir_label, parent=parent)
-                self.db_tree.toggle_node(dir_label)
-                return self._init_db_tree(list(value.items()), dir_label)
-            else:
-                file_node = FileNode(value)
-                self.db_tree.add_node(file_node, parent=parent)
-                self.database_file_nodes[file_node.db_object.path] = file_node
-
-    def _parse_db_files(self):
-        """return a dictionary of the directory layout structure"""
-        def directory_builder(path_deque, base_dict, obj):
-            if len(path_deque) == 1:
-                base_dict[path_deque.popleft()] = obj
-                return
-            else:
-                key = path_deque.popleft()
-                if key in base_dict:
-                    return directory_builder(path_deque, base_dict[key], obj)
-                else:
-                    new_dict = {}
-                    base_dict[key] = new_dict
-                    return directory_builder(path_deque, new_dict, obj)
-
-        file_dict = {}
-        for file in db.FileManager.files.values():
-            path = deque(file.path.split(os.sep))
-            if path[0] == '':       # For Unix
-                path.popleft()      # Remove '/' root
-            directory_builder(path, file_dict, file)
-        return file_dict
-
 
 class FileNode(TreeViewNode, BoxLayout):
 
@@ -158,6 +151,62 @@ class FileNode(TreeViewNode, BoxLayout):
         descript = Label(text=self.db_object.name, halign="left", valign="center")
         descript.bind(size=descript.setter("text_size"))
         self.add_widget(descript)
+
+
+class DatabaseTree(TreeView):
+
+    def __init__(self, **kwargs):
+        super(DatabaseTree, self).__init__(**kwargs)
+        self.directory_layout = {}    # Flat dict -> key: file_path (incl directories), value: node
+
+    def add_file_node(self, file_path, file_obj):
+        path = file_path.split(os.sep)
+        file_name = path.pop()
+        full_dir = ''
+        parent = None
+        for directory in path:
+            full_dir += (directory + os.sep)
+            if full_dir not in self.directory_layout:   # Directory does not exist
+                dir_node = TreeViewLabel(text=directory, no_selection=True)    # Create node for directory
+                self.directory_layout[full_dir] = dir_node      # Set reference between directory path and node
+                super(DatabaseTree, self).add_node(dir_node, parent=parent)     # Add to tree
+                self.toggle_node(dir_node)
+                parent = dir_node                                   # Set node as parent for next folder in hierarchy
+            else:   # Directory already exists
+                parent = self.directory_layout[full_dir]    # Set node as parent for next folder in hierarchy
+        full_dir += file_name               # Get path for file
+        file_node = FileNode(file_obj)      # Create node for File
+        self.directory_layout[full_dir] = file_node     # Set reference between path and file
+        super(DatabaseTree, self).add_node(file_node, parent=parent)    # Add to Tree
+
+    def remove_file_node(self, file_node):
+        try:
+            db.FileManager.remove_file(file_node.db_object.db_id)       # will return error is still tagged
+        except IntegrityError as errmsg:
+            print("Cannot delete tagged file", errmsg)
+            return
+        if len(file_node.parent_node.nodes) > 1:
+            del self.directory_layout[file_node.db_object.path]
+            super(DatabaseTree, self).remove_node(file_node)
+        else:
+            parent_path = file_node.db_object.path.rpartition(os.sep)   # TODO - very messy. Make better
+            parent_path = parent_path[0] + parent_path[1]
+            del self.directory_layout[parent_path]
+            del self.directory_layout[file_node.db_object.path]
+            super(DatabaseTree, self).remove_node(file_node.parent_node)
+            super(DatabaseTree, self).remove_node(file_node)
+
+    def sort_by_folder(self, *args):        # TODO Create custom load functions
+        # Remove current nodes
+        for node in self.root.nodes:
+            self.remove_node(node)
+        # List files by directory hierarchy
+
+    def sort_by_tags(self, *args):          # TODO Create custom load functions
+        # Remove current nodes
+        for node in self.root.nodes:
+            self.remove_node(node)
+        # List files by tag hierarchy
 
 
 def throwaway(*args):
