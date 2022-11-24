@@ -19,8 +19,8 @@ class TagPane(RelativeLayout):
     def __init__(self, **kwargs):
         super(TagPane, self).__init__(**kwargs)
         # Create Layout
-        self.add_widget(Label(text="Tag Manager", size_hint=(1, 0.08), pos_hint={"top": 1}))
-        options_box = BoxLayout(pos_hint={"top": 0.92}, size_hint=(1, 0.06), orientation="horizontal")
+        self.add_widget(Label(text="Tag Manager", size_hint=(1, 0.06), size_hint_max_y=35, pos_hint={"top": 1}))
+        options_box = BoxLayout(pos_hint={"top": 0.94}, size_hint=(1, 0.06), orientation="horizontal")
         options_box.add_widget(Button(text="Add New Group", on_press=self.add_group))
         options_box.add_widget(Button(text="Delete Group", on_press=self.delete_group))
         self.add_widget(options_box)

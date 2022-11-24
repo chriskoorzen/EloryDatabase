@@ -29,15 +29,33 @@
             size: self.size
     text: "OptionsBar"
 
+<ActionLogBar@Label>:
+    canvas.before:
+        Color:
+            rgba: 0.3, 0.3, 0.3, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    text: "ActionLogBar: Print useful messages and user actions here"
+
 <RootWidget>:
     orientation: "vertical"
     OptionsBar:
         size_hint_y: 0.06
+        size_hint_max_y: 35
+        # on_size: print(self.height)
     BoxLayout:
         # size_hint_y: 0.94
         FileNavigationPane:
             size_hint_x: 0.32
+            size_hint_max_x: 385
+            # on_size: print(self.width)
         FileDisplayPane:
             size_hint_x: 0.44
         TagPane:
             size_hint_x: 0.24
+            size_hint_max_x: 290
+            # on_size: print(self.width)
+    ActionLogBar:
+        size_hint_y: 0.04
+        size_hint_max_y: 25

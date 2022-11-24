@@ -12,7 +12,8 @@ class FileDisplayPane(RelativeLayout):
 
     def __init__(self, **kwargs):
         super(FileDisplayPane, self).__init__(**kwargs)
-        self.add_widget(Label(text="File Display", size_hint=(1, 0.08), pos_hint={"top": 1}))
+        self.add_widget(Label(text="File Display", size_hint=(1, 0.06), size_hint_max_y=35, pos_hint={"top": 1}))
+        # self.add_widget(Button(text="Save Changes", size_hint=(0.25, 0.06), pos_hint={"top": 0.94, 'right': 1}))
         bounding_box = BoxLayout(padding=[0, 0, 0, 0], size_hint=(1, 0.6), pos_hint={"top": 0.92})
         self.file_display = Image(source="")
         with self.file_display.canvas:
@@ -24,7 +25,7 @@ class FileDisplayPane(RelativeLayout):
         bounding_box.add_widget(self.file_display)
         self.add_widget(bounding_box)
 
-        self.tag_display = StackLayout(size_hint=(1, 0.30), pos_hint={"top": 0.32}, padding=12, orientation='lr-tb', spacing=5)
+        self.tag_display = StackLayout(size_hint=(1, 0.30), pos_hint={"top": 0.28}, padding=8, orientation='lr-tb', spacing=5)
         self.add_widget(self.tag_display)
 
     def set_active_object(self, *args):
@@ -34,10 +35,10 @@ class FileDisplayPane(RelativeLayout):
 
         # Getting tags for file object
         self.tag_display.clear_widgets()    # Clean tags on each update
-        if type(file_object) != type:       # Identify 'Anon' objects and exclude
+        if type(file_object) != type:       # Filter out 'Anon' objects -> Part of workaround
             for tag in file_object.tags.values():
                 # TODO define custom widget for Tag displays -> click func to remove or edit from current tagged file
-                display_tag = Button(text=f"{tag.group.name}: {tag.name}", size_hint=(None, None), padding=(12, 12))
+                display_tag = Button(text=f"{tag.name}", size_hint=(None, None), padding=(12, 12))
                 display_tag.bind(texture_size=display_tag.setter("size"))    # Bind widget size directly to texture size
                 self.tag_display.add_widget(display_tag)
 
@@ -45,7 +46,7 @@ class FileDisplayPane(RelativeLayout):
         print("Got tag ->", *args)
         tag = args[1].db_object
         # TODO define custom widget for Tag displays -> click func to remove or edit from current tagged file
-        display_tag = Button(text=f"{tag.group.name}: {tag.name}", size_hint=(None, None), padding=(12, 12))
+        display_tag = Button(text=f"{tag.name}", size_hint=(None, None), padding=(12, 12))
         display_tag.bind(texture_size=display_tag.setter("size"))  # Bind widget size directly to texture size
         # TODO need to be able to uniquely identify displayTags, so that we don't add it multiple times
         self.tag_display.add_widget(display_tag)

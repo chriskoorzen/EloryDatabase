@@ -1,3 +1,4 @@
+import pprint
 import os
 from collections import deque
 
@@ -19,7 +20,7 @@ from databaseManagers import Database as db
 from sqlite3 import IntegrityError
 DEFAULT_SYSTEM_FILE = "/home/student/PycharmProjects/elory"  # str(Path.home())     # Where system view opens by default
 # TODO Have consistency across database and system views in respect to tagged files -> a selected file on system view
-# TODO   should still reflect its tags. (Will possible have to tweak FileChooser classes)
+#   should still reflect its tags. (Will possibly have to tweak FileChooser classes -> just the FileListEntry template)
 
 
 class FileNavigationPane(RelativeLayout):
@@ -29,13 +30,13 @@ class FileNavigationPane(RelativeLayout):
         super(FileNavigationPane, self).__init__(**kwargs)
         # self.bind(active_selected_file=throwaway)
         # Top Level View Options
-        self.add_widget(Label(text="File Navigator", size_hint=(1, 0.08), pos_hint={"top": 1}))
-        view_options = BoxLayout(size_hint=(1, 0.06), pos_hint={"top": 0.92}, orientation='horizontal')
+        self.add_widget(Label(text="File Navigator", size_hint=(1, 0.06), size_hint_max_y=35, pos_hint={"top": 1}))
+        view_options = BoxLayout(size_hint=(1, 0.06), pos_hint={"top": 0.94}, orientation='horizontal')
         view_options.add_widget(ToggleButton(text="System Files", group="view_options", state='down', on_press=self.set_system_file_view))
         view_options.add_widget(ToggleButton(text="Database Files", group="view_options", on_press=self.set_database_file_view))
         self.add_widget(view_options)
 
-        # System Files Tree View    -> Roll own over FileChooser
+        # System Files Tree View    -> Roll own, instead of using FileChooser
         # sys_box = RelativeLayout(size_hint=(1, 0.85), pos_hint={"top": 0.85})
         # sys_box.add_widget(Button(text="Select folder..", size_hint=(0.4, 0.08), pos_hint={"top": 1}, on_press=self.select_folder,))
         # self.sys_tree = TreeView(root_options={"text": "System Files", "no_selection": True}, size_hint=(1, None))
@@ -92,12 +93,22 @@ class FileNavigationPane(RelativeLayout):
         self.db_tree.remove_file_node(self.db_tree.selected_node)
 
     def set_active_file_object(self, *args):
-        if type(args[0]) == FileChooserListView:
-            # "bug": FileChooser gives an empty list when dir select is False and clicking between files and dirs
-            if args[1] == []:
+        if type(args[0]) == FileChooserListView:   # Handle when MyFileChooserListView calls the function
+            # print("--call set system file view--")
+            # pprint.pprint(args[0].__dict__)
+            # for each in args[0].__dict__['_items']:
+            #     print()
+            #     pprint.pprint(each.__dict__)
+            #     if each.__dict__['selected']:
+            #         print("-------------------------------------")
+            #         pprint.pprint(each.__dict__['_proxy_ref'].__dict__)
+            #         print("-------------------------------------")
+            if args[1] == []:   # Passes empty list when dir select is False
                 return
             path_string = args[1][0]
             # Create 'anon' object on the fly with 'path' member
+            # This is a workaround. Ideally we could have a single object represent a file, regardless if it was in
+            # the database
             self.active_selected_file = type('anon', (object, ), {"path": path_string})   # Pass 'anon' object
         if type(args[0]) == DatabaseTree:
             self.active_selected_file = args[1].db_object   # Pass db object itself
@@ -166,8 +177,8 @@ class DatabaseTree(TreeView):
         parent = None
         for directory in path:
             full_dir += (directory + os.sep)
-            if full_dir not in self.directory_layout:   # Directory does not exist
-                dir_node = TreeViewLabel(text=directory, no_selection=True)    # Create node for directory
+            if full_dir not in self.directory_layout:                           # Directory does not exist
+                dir_node = TreeViewLabel(text=directory, no_selection=True)     # Create node for directory
                 self.directory_layout[full_dir] = dir_node      # Set reference between directory path and node
                 super(DatabaseTree, self).add_node(dir_node, parent=parent)     # Add to tree
                 self.toggle_node(dir_node)
