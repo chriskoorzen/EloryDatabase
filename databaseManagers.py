@@ -1,9 +1,8 @@
 import logging
 import sqlite3
 import os.path
-
-from databaseObjects import TagGroup, Tag, File
-from SQLTemplates import tableTemplate, tables
+import hashlib
+from pathlib import PurePath
 
 # TODO decide on error policy and propagation
 db_logger = logging.getLogger(__name__)
@@ -15,259 +14,571 @@ db_logger.addHandler(handler)
 db_logger.propagate = False
 
 
-class FileManager:
+class Database:
+    _DEFINITION = {  # {
+        "files": (  # table_name: (
+            {"file_id": "INTEGER PRIMARY KEY",  # {column_name: column_definition},
+             "file_path": "TEXT UNIQUE NOT NULL",  # {constraint: constraint_definition}
+             "file_hash_name": "TEXT UNIQUE NOT NULL"},  # ),
+            {}  # }
+        ),
+        "tag_groups": (
+            {"group_id": "INTEGER PRIMARY KEY",
+             "group_name": "TEXT UNIQUE NOT NULL"},
+            {}
+        ),
+        "tags": (
+            {"tag_id": "INTEGER PRIMARY KEY",
+             "tag_name": "TEXT NOT NULL",
+             "tag_group": "INTEGER NOT NULL"},
+            {"FOREIGN KEY(tag_group)": "REFERENCES tag_groups(group_id) ON DELETE RESTRICT ON UPDATE CASCADE",
+             "UNIQUE(tag_name, tag_group)": "ON CONFLICT FAIL"}
+        ),
+        "tagged_files_m2m": (
+            {"tag": "INTEGER NOT NULL",
+             "file": "INTEGER NOT NULL"},
+            {"FOREIGN KEY(tag)": "REFERENCES tags(tag_id) ON DELETE RESTRICT ON UPDATE CASCADE",
+             "FOREIGN KEY(file)": "REFERENCES files(file_id) ON DELETE RESTRICT ON UPDATE CASCADE",
+             "UNIQUE(tag, file)": "ON CONFLICT FAIL"}
+        )
+    }
+    _DEFAULT_VALUES = {  # groups: [tags]
+        "People": ["Jack Pembleton", "Benoit Blanc", "Kimberly Mathis"],
+        "Places": ["New York", "Livingstone Beach", "Frontier National Park", "Modena Vacation Home"],
+        "Pets": ["Leah -Dog", "Luna -Cat", "Jack -Bird"]
+    }
 
-    files = dict()
+    DATA_DIR = ''
+    FILE_IDENTIFIER = ".edb"  # elory database
+    CONN = None
+    CURS = None
 
-    @staticmethod
-    def _load_members():
-        # Get tag groups
-        Database.CURSOR.execute("SELECT file_id, file_path, file_hash_name FROM files")
-        result = Database.CURSOR.fetchall()
-        for item in result:
-            FileManager.files[item[0]] = File(item[0], item[1], item[2])
-        db_logger.info(f"{len(FileManager.files)} Files loaded...")
+    def __init__(self, path=None, create_new=None, data_dir=None):
+        # Data directory -> The database storage location. Defaults to cwd
+        # Path -> shorthand for "connect to db"
+        # Create new -> Shorthand for "create new db" at "path"
+        self.DATA_DIR = os.getcwd() if (data_dir is None or not os.path.isdir(data_dir)) else data_dir
+        # self.PATH = path
 
-    @staticmethod
-    def _load_tag_data():
-        # Only call when Tags and TagGroups have been instantiated
-        for file_id in FileManager.files.keys():
-            Database.CURSOR.execute(f"SELECT tag FROM tagged_files_m2m WHERE file={file_id}")
-            result = Database.CURSOR.fetchall()
-            for tag_id in result:
-                tag_id = tag_id[0]
-                FileManager.files[file_id].tags[tag_id] = TagManager.tags[tag_id]
+    def _prepare_path(self, path):
+        # Allow user to specify a custom absolute path
+        proposed = PurePath(path)
+        if proposed.is_absolute():  # Not a relative path name
+            if os.path.exists(os.path.dirname(path)):  # The directory actually exists
+                # TODO strip any "." suffixes
+                return path + self.FILE_IDENTIFIER
+            raise sqlite3.DatabaseError  # Absolute path by semantics, but parent dir does not exist
+        # else, take relative name and append to specified data directory
+        path = self.DATA_DIR + os.sep + path + self.FILE_IDENTIFIER  # Take
+        return path
 
-    @staticmethod
-    def add_file(path):
-        if not os.path.isfile(path):
-            db_logger.warning(f"File '{path}' does not exist.")
-            return
-        full_path = os.path.abspath(path)
-        file_hash = File.digest(path)
+    def _build_tables(self, default_values=True):
+        table_template = "BEGIN;\n"  # SQL script start
+        for table in self._DEFINITION.keys():
+            table_template += f"CREATE TABLE {table}("  # Open Table definition
+            for column in self._DEFINITION[table][0].keys():
+                table_template += f"{column} {self._DEFINITION[table][0][column]}, "  # Add columns
+            for constn in self._DEFINITION[table][1].keys():
+                table_template += f"{constn} {self._DEFINITION[table][1][constn]}, "  # Add constraints
+            table_template = table_template.rstrip(", ") + ");\n"  # close table definition
+        table_template += "COMMIT;\n"  # SQL script end
+        self.CURS.executescript(table_template)
+        db_logger.info(f"Initialized tables for database '{self.PATH}'")
+        if default_values:
+            # TODO call create function with default values
+            db_logger.info(f"Initialized default values for database '{self.PATH}'")
+            pass
 
-        Database.CURSOR.execute(f"INSERT INTO files (file_path, file_hash_name) VALUES ('{full_path}', '{file_hash}')")
-        Database.CONNECTION.commit()
-        new_file = File(Database.CURSOR.lastrowid, full_path, file_hash)
-        FileManager.files[Database.CURSOR.lastrowid] = new_file
-        db_logger.info(f"Added file '{full_path}' to database")
-        return new_file
+    def _disconnect(self):
+        if self.CONN is not None:
+            self.CONN.close()
+            db_logger.info(f"Database '{self.PATH}' closed.")
 
-    @staticmethod
-    def remove_file(file_id):
-        # TODO Should be able to delete files even if tagged.
-        f = FileManager.files[file_id]
-        Database.CURSOR.execute(f"DELETE FROM files WHERE file_id={f.db_id}")       # This SQL should cascade auto
-        # Database.CURSOR.execute(f"DELETE FROM tagged_files_m2m WHERE file={f.db_id}")     # Fall back if cascade fails
-        Database.CONNECTION.commit()
-        for tag in f.tags.values():
-            # purge from tags
-            del tag.files[file_id]
-        del FileManager.files[file_id]
-        db_logger.info(f"Removed file '{f.path}' from database")
+    def _definition_exists(self):
+        # Check if required tables are present
+        self.CURS.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+        db_tables = {x[0] for x in self.CURS.fetchall()}
+        fmt_tables = {x for x in self._DEFINITION.keys()}
+        if not fmt_tables <= db_tables:
+            # format tables is not present in (subset of) database...
+            errmsg = "Required tables not present in database"
+            db_logger.warning(f"{errmsg} '{self.PATH}'")
+            return False
+        if len(db_tables) > len(fmt_tables):  # Warn if foreign tables are present
+            db_logger.warning(f"Unrecognized tables detected in database '{self.PATH}'")
 
-    @staticmethod
-    def add_tag_to_file(file_id, tag: Tag):
-        f = FileManager.files[file_id]
-        Database.CURSOR.execute(f"INSERT INTO tagged_files_m2m (tag, file) VALUES ({tag.db_id}, {f.db_id})")
-        Database.CONNECTION.commit()
-        f.tags[tag.db_id] = tag
-        tag.files[f.db_id] = f
-        db_logger.info(f"Tagged file '{f.path}' with tag '{tag.name}'")
+        # Check for column format mismatch
+        for i in fmt_tables:
+            self.CURS.execute(f"PRAGMA table_info({i});")
+            columns = {x[1] for x in self.CURS.fetchall()}
+            # TODO find better way to filter FOREIGN and UNIQUE constraint definitions -> the below method is fragile
+            expected = {x for x in self._DEFINITION[i][0].keys()}
+            # expected = {x for x in self._DEFINITION[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}
+            if not columns == expected:
+                errmsg = "Tables exist but do not match the required column formats in database"
+                db_logger.warning(f"{errmsg} '{self.PATH}'")
+                return False
+        db_logger.info(f"Table formats OK in database '{self.PATH}'")
+        return True  # All checks passed
 
-    @staticmethod
-    def remove_tag_from_file(file_id, tag: Tag):
-        f = FileManager.files[file_id]
-        Database.CURSOR.execute(f"DELETE FROM tagged_files_m2m WHERE tag={tag.db_id} AND file={f.db_id}")
-        Database.CONNECTION.commit()
-        db_logger.info(f"Untagged file '{f.path}' from tag '{tag.name}'")
-        del f.tags[tag.db_id]
-        del tag.files[file_id]
-
-    # TODO Utility function to integrity check file_path, while keeping file_hash consistent ->
-
-
-class TagManager:
-
-    tags = dict()
-    groups = dict()
-
-    @staticmethod
-    def _load_members():
-        # Get tag groups
-        Database.CURSOR.execute("SELECT group_id, group_name FROM tag_groups")
-        result = Database.CURSOR.fetchall()
-        for item in result:
-            TagManager.groups[item[0]] = TagGroup(item[0], item[1])
-        db_logger.info(f"{len(TagManager.groups)} Tag groups loaded...")
-
-        # Get tags
-        for group_id in TagManager.groups.keys():
-            Database.CURSOR.execute(f"SELECT tag_id, tag_name FROM tags WHERE tag_group={group_id}")
-            result = Database.CURSOR.fetchall()
-            for tag_attr in result:
-                tag = Tag(tag_attr[0], tag_attr[1], TagManager.groups[group_id])
-                TagManager.tags[tag.db_id] = tag
-                TagManager.groups[group_id].tags[tag.db_id] = tag
-        db_logger.info(f"{len(TagManager.tags)} Tags loaded...")
-
-    @staticmethod
-    def _load_file_data():
-        # Only call when Tags and TagGroups have been instantiated
-        for tag_id in TagManager.tags.keys():
-            Database.CURSOR.execute(f"SELECT file FROM tagged_files_m2m WHERE tag={tag_id}")
-            result = Database.CURSOR.fetchall()
-            for file_id in result:
-                file_id = file_id[0]
-                TagManager.tags[tag_id].files[file_id] = FileManager.files[file_id]
-
-    @staticmethod
+    # TODO do not let database accept empty or funny strings. Sanitize for sql injection
     def _sanitize_names(name):
-        if name == '' or name == ' ':  # TODO do not let database accept empty or funny strings. Sanitize for sql injection
+        if name == '' or name == ' ':
             errmsg = "Name cannot be empty or special characters. Alpha-Numeric only"
             raise sqlite3.IntegrityError(errmsg)
 
     @staticmethod
-    def new_group(name):
-        TagManager._sanitize_names(name)
-        Database.CURSOR.execute(f'INSERT INTO tag_groups (group_name) VALUES ("{name}")')
-        Database.CONNECTION.commit()
-        obj_id = Database.CURSOR.lastrowid
-        new_group = TagGroup(obj_id, name)
-        TagManager.groups[obj_id] = (new_group)
-        db_logger.info(f"New group '{name}' added to database")
-        return new_group
+    def digest(file):
+        """Return a unique hash code of a given file.
 
-    @staticmethod
-    def delete_group(group_id):
-        g = TagManager.groups[group_id]
-        Database.CURSOR.execute(f'DELETE FROM tag_groups WHERE group_id={g.db_id}')
-        Database.CONNECTION.commit()
-        TagManager.groups.pop(group_id)
-        db_logger.info(f"Group '{g.name}' removed from database")
-        del g
+        The return must be unique to the file itself, should be platform-agnostic and resilient to meta-data changes.
+        The goal is to identify a particular file (defined as a series of bits) regardless of the OS, underlying fs,
+        or system architecture.
+        """
+        if not os.path.isfile(file):
+            db_logger.warning(f"{file} is not a valid file")
+            return False
+        h = hashlib.md5()
+        b = bytearray(128 * 1024)
+        mv = memoryview(b)  # using memoryview, we can slice a buffer without copying it
 
-    @staticmethod
-    def rename_group(group_id, new_name):
-        TagManager._sanitize_names(new_name)
-        g = TagManager.groups[group_id]
-        Database.CURSOR.execute(f'UPDATE tag_groups SET group_name="{new_name}" WHERE group_id={g.db_id}')
-        Database.CONNECTION.commit()
-        db_logger.info(f"Group '{g.name}' renamed to '{new_name}'")
-        g.name = new_name
+        with open(file, 'rb', buffering=0) as file_obj:
+            while n := file_obj.readinto(mv):
+                h.update(mv[:n])
+        return h.hexdigest()
 
-    @staticmethod
-    def new_tag(name: str, group: TagGroup):
-        TagManager._sanitize_names(name)
-        Database.CURSOR.execute(f'INSERT INTO tags (tag_name, tag_group) VALUES ("{name}", {group.db_id})')
-        Database.CONNECTION.commit()
-        tag = Tag(Database.CURSOR.lastrowid, name, group)
-        TagManager.tags[tag.db_id] = tag
-        group.tags[tag.db_id] = tag
-        db_logger.info(f"New tag '{tag}' added to database")
-        return tag
+    # Database management
+    def create_new_db(self, path, default_values=True):
 
-    @staticmethod
-    def delete_tag(tag_id):
-        # Must not be able to delete tags attached to files
-        t = TagManager.tags[tag_id]
-        Database.CURSOR.execute(f'DELETE FROM tags WHERE tag_id={t.db_id} AND tag_group={t.group.db_id}')
-        Database.CONNECTION.commit()
-        TagManager.tags.pop(tag_id)
-        t.group.tags.pop(t.db_id)
-        db_logger.info(f"Tag '{t}' removed from database")
-        del t
+        if os.path.isfile(path):  # reject existing files
+            # TODO or directories must also be rejected
+            db_logger.critical(f"File '{path}' already exists.")
+            raise sqlite3.DatabaseError
 
-    @staticmethod
-    def rename_tag(tag_id, new_name: str):
-        TagManager._sanitize_names(new_name)
-        t = TagManager.tags[tag_id]
-        Database.CURSOR.execute(f'UPDATE tags SET tag_name="{new_name}" WHERE tag_id={t.db_id}')
-        Database.CONNECTION.commit()
-        db_logger.info(f"Tag '{t.name}' renamed to '{new_name}'")
-        t.name = new_name
+        self.PATH = self._prepare_path(path)  # Set path, and new file name
 
+        self.CONN = sqlite3.connect(self.PATH)  # Create (connect) new sqlite3 database
+        self.CURS = self.CONN.cursor()
 
-class Database:
-
-    NAME = ''
-    CONNECTION = ''
-    CURSOR = ''
-
-    FileManager = FileManager
-    TagManager = TagManager
-
-    @staticmethod
-    def connect_db(path):
-
-        if not os.path.isfile(path):
-            db_logger.warning(f"File '{path}' does not exist. Creating new sqlite3 database")
-            # sqlite3 default is to go ahead and create a file that does not already exist -> go ahead.
-
-        # TODO differentiate between db name and absolute path - use set variables instead of supplied "path variable"
-        Database.NAME = path
-        Database.CONNECTION = sqlite3.connect(Database.NAME)
-        Database.CURSOR = Database.CONNECTION.cursor()
-
-        # Check if database is valid -> if so, is it empty?
-        Database.CURSOR.execute("PRAGMA schema_version")    # Will fail with 'sqlite3.DatabaseError' if invalid file
-        db_logger.info(f"Connected to database '{path}'")
-        if Database.CURSOR.fetchone()[0] == 0:
-            # Database is valid but empty -> setup tables
-            db_logger.warning(f"Database '{path}' is empty... Auto creating tables...")
-            Database._create_db()
-            Database.CONNECTION.commit()
-            db_logger.info(f"Tables created for database '{path}'")
-
-        # Check if needed tables are present
-        Database.CURSOR.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%';")
-        db_tables = {x[0] for x in Database.CURSOR.fetchall()}
-        fmt_tables = {x for x in tables.keys()}
-        if not fmt_tables <= db_tables:             # if format tables is not present in (subset of) database...
-            errmsg = "Required tables not present in database"
-            db_logger.critical(f"{errmsg} '{path}'. Abort operation.")
-            Database.CONNECTION.close()
-            raise sqlite3.DatabaseError(errmsg)
-        # Check for column format mismatch
-        for i in fmt_tables:
-            Database.CURSOR.execute(f"PRAGMA table_info({i});")
-            columns = {x[1] for x in Database.CURSOR.fetchall()}
-            # TODO find better way to filter -> the below method is fragile
-            expected = {x for x in tables[i].keys() if 'FOREIGN' not in x and 'UNIQUE' not in x}    
-            if not columns == expected:
-                errmsg = "Tables exist in database but do not match the required column formats"
-                db_logger.critical(f"{errmsg} '{path}'. Abort operation.")
-                Database.CONNECTION.close()
-                raise sqlite3.DatabaseError(errmsg)
-        db_logger.info(f"Table formats recognized in database '{path}'")
-
-        # Warn if foreign tables are present
-        if len(db_tables) > len(fmt_tables):
-            db_logger.warning(f"Additional unrecognized tables detected in database '{path}'")
+        self._build_tables(default_values)  # Build database
 
         # Necessary settings for database
-        Database.CURSOR.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
-        Database.CONNECTION.commit()
+        self.CURS.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
+        self.CONN.commit()
+        db_logger.info(f"Database '{self.PATH}' creation complete and ready for operation")
 
-        # Load tag groups, tags, files and their respective connections
-        Database.TagManager._load_members()
-        Database.FileManager._load_members()
-        Database.TagManager._load_file_data()
-        Database.FileManager._load_tag_data()
+    def connect_db(self, path):
 
-        # Database program ready
-        db_logger.info(f"Database '{path}' ready for operation.")
+        if not os.path.isfile(path):  # Reject non-files
+            db_logger.critical(f"File '{path}' does not exist.")
+            raise sqlite3.DatabaseError
 
-    @staticmethod
-    def _create_db():
-        Database.CURSOR.executescript(tableTemplate)
+        self._disconnect()
+        self.PATH = path
+        self.CONN = sqlite3.connect(self.PATH)  # Connect to existing file
+        self.CURS = self.CONN.cursor()
 
-    @staticmethod
-    def close_db():
-        db_logger.info(f"Getting ready to close database '{Database.NAME}' ...")
-        TagManager.tags.clear()
-        TagManager.groups.clear()
-        FileManager.files.clear()
-        db_logger.info(f"Objects cleared from memory ...")
-        Database.CONNECTION.close()
-        db_logger.info(f"Database '{Database.NAME}' closed and ready for new connection.")
+        # Check if file is valid sqlite3 database
+        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'sqlite3.DatabaseError' if invalid file
+        db_logger.info(f"Connected to database '{self.PATH}' ...")
+
+        # Is this db empty?
+        if self.CURS.fetchone()[0] == 0:  # Database is valid but empty -> abort connection
+            errmsg = f"Database '{self.PATH}' is empty. Abort connection."
+            db_logger.critical(errmsg)
+            self._disconnect()
+            raise sqlite3.DatabaseError(errmsg)
+
+        if not self._definition_exists():  # Does it have the necessary tables and columns?
+            errmsg = f"Database '{self.PATH}' data format mismatch. Abort connection."
+            db_logger.critical(errmsg)
+            self._disconnect()
+            raise sqlite3.DatabaseError(errmsg)
+
+        # Necessary settings for database
+        self.CURS.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
+        self.CONN.commit()
+        db_logger.info(f"Database '{self.PATH}' connected and ready for operation.")
+
+    def extend_db(self, path, default_values=True):
+
+        if not os.path.isfile(path):  # Reject non-files
+            db_logger.critical(f"File '{path}' does not exist.")
+            raise sqlite3.DatabaseError
+
+        self._disconnect()
+        self.PATH = path
+        self.CONN = sqlite3.connect(self.PATH)  # Connect to existing file
+        self.CURS = self.CONN.cursor()
+
+        # Check if file is valid sqlite3 database
+        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'sqlite3.DatabaseError' if invalid file
+        db_logger.info(f"Connected to database '{self.PATH}' ...")
+
+        if self._definition_exists():
+            errmsg = f"Database '{self.PATH}' data format already exists. Abort extension."
+            db_logger.critical(errmsg)
+            self._disconnect()
+            raise sqlite3.DatabaseError(errmsg)
+
+        self._build_tables(default_values)
+
+        # Necessary settings for database
+        self.CURS.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
+        self.CONN.commit()
+        db_logger.info(f"Extension of database '{self.PATH}' successful and ready for operation")
+
+    # CRUD operations   -> TODO could probably modify to take any kind and number of valid items and do batch ops
+    def create_entry(self, item, values: list):
+        """
+        item -> specify the type of entry to make.      options: "file", "group", "tag"
+        values -> a list of dicts containing the parameters of the specified item
+            "file" : {
+                'file_path': 'path to file object'
+            }
+            "group" : {
+                'group_name': 'name for a new group'
+            }
+            "tag" : {
+                'tag_name': 'name for new tag',
+                'group': int id of group                  -> in future support 'group_name' as txt
+            }
+            "tag-file": {
+                'file': int file_id
+                'tag':  int tag_id
+            }
+        returns a list (in order) of newly created items id's or True -> if an entry failed, None (or False?) instead
+        """
+
+        if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
+            errmsg = f"Item '{item}' is not a valid database object"
+            db_logger.critical(errmsg)
+            raise sqlite3.IntegrityError(errmsg)
+
+        # TODO unfortunately, cur.execute only stores the last rowid of a newly created item, so we will have to call
+        #   the function iteratively. Perhaps create a custom sql func that can return the list of a batch transaction?
+
+        if item == "file":
+            newly_created_files = []
+            for new_file in values:  # Iterate over list of dicts
+                unique_hash = self.digest(new_file['file_path'])  # return false if not valid path. else hash
+                if not unique_hash:
+                    newly_created_files.append(None)
+                    continue
+                try:
+                    self.CURS.execute(
+                        f"INSERT INTO files (file_path, file_hash_name) VALUES ('{os.path.abspath(new_file['file_path'])}', '{unique_hash}')")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    newly_created_files.append(None)
+                    continue
+                self.CONN.commit()
+                newly_created_files.append(self.CURS.lastrowid)
+                db_logger.info(f"Added file '{new_file['file_path']}' to database")
+            return newly_created_files
+
+        if item == "group":
+            newly_created_groups = []
+            for new_group in values:  # Iterate over list of dicts
+                # TODO santitize new_group['group_name']
+                try:
+                    self.CURS.execute(f"INSERT INTO tag_groups (group_name) VALUES ('{new_group['group_name']}')")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    newly_created_groups.append(None)
+                    continue
+                self.CONN.commit()
+                newly_created_groups.append(self.CURS.lastrowid)
+                db_logger.info(f"New group '{new_group['group_name']}' added to database")
+            return newly_created_groups
+
+        if item == "tag":
+            newly_created_tags = []
+            for new_tag in values:  # Iterate over list of dicts
+                group = new_tag['group']
+                # if type(group) != int:                # TODO support group names as txt in future
+                # TODO santitize new_tag['tag_name']
+                try:
+                    self.CURS.execute(
+                        f"INSERT INTO tags (tag_name, tag_group) VALUES ('{new_tag['tag_name']}', {new_tag['group']})")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    newly_created_tags.append(None)
+                    continue
+                self.CONN.commit()
+                newly_created_tags.append(self.CURS.lastrowid)
+                db_logger.info(f"New tag '{new_tag['tag_name']}' added to database")
+            return newly_created_tags
+
+        if item == "tag-file":
+            newly_linked_tag_files = []
+            for link in values:
+                try:
+                    self.CURS.execute(
+                        f"INSERT INTO tagged_files_m2m (tag, file) VALUES ('{link['tag']}', '{link['file']}')")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    newly_linked_tag_files.append(None)
+                    continue
+                self.CONN.commit()
+                newly_linked_tag_files.append(self.CURS.lastrowid)
+                db_logger.info(f"Linked tag '{link['tag']}' to file '{link['file']}'")
+            return newly_linked_tag_files
+
+    def read_entry(self, values: list = []):
+        """
+        values        = [ (entry_to_read, by_parameter, parameter_value  ), ... ]
+        entry to read = specify the type      valid options: "files", "tag_groups", "tags"
+        returns a list of requested items in order
+        "files" : {
+            'all': None                                 -> return all files                                 (list)
+            'file_path': str,
+            'file_hash_name': str,
+            'file_id': int,                             -> return the matching file object                  (tuple)
+            'tag_id': int,                              -> returns all files associated with this tag       (list)
+            'group_id': int,                                                                                            # TODO Future
+            'group_name': str                           -> returns all files associated with this group     (list)      # TODO Future
+        }
+        "tag_groups" : {
+            'all': None                                 -> return all groups                                (list)
+            'group_name': str,
+            'group_id': int,                            -> return the matching group object                 (tuple)
+            'tag_id': int,                              -> return the matching group object                 (tuple)
+            'tag_name': str,                            -> return all groups associated with this tag name  (list)
+            'file_id': int,                                                                                             # TODO Future
+            'file_hash_name': str,                                                                                      # TODO Future
+            'file_path': str,                           -> return all groups associated with this file      (list)      # TODO Future
+        }
+        "tags" : {
+            'all': None                                 -> return all tags                                  (list)
+            'tag_id': int tag_id                        -> return the matching tag object                   (tuple)
+            'tag_name': str 'tag name'                  -> return all tags associated with this name        (list)
+            'file_id': int,
+            'file_hash_name': str,
+            'file_path': str,                           -> return all tags associated with this file        (list)
+            'group_id': int,
+            'group_name': str                           -> return all tags associated with this group       (list)
+        }
+        """
+        valid_props = {'group_id', 'group_name', 'tag_id', 'tag_name', 'file_id', 'file_hash_name', 'file_path'}
+        valid_items = {"files", "tag_groups", "tags"}
+        results = []
+        for entry in values:  # Expect a tuple ( "item", "property", "prop_value" )
+            if entry[0] in valid_items:
+                if entry[1] == 'all':  # return all items of type
+                    self.CURS.execute(f"SELECT * FROM {entry[0]}")
+                    results.append(self.CURS.fetchall())
+
+                elif entry[1] in valid_props:
+                    if entry[1] in self._DEFINITION[entry[0]][0]:  # inside its own table
+                        self.CURS.execute(f"SELECT * FROM {entry[0]} WHERE {entry[1]}='{entry[2]}'")
+                        results.append(self.CURS.fetchall())
+
+                    elif (entry[0] == "files") and (entry[1] == "tag_id"):  # m2m tag-file query
+                        self.CURS.execute(f"SELECT file FROM tagged_files_m2m WHERE tag='{entry[2]}'")
+                        results.append(self.CURS.fetchall())
+
+                    elif (entry[0] == "tags") and ("file" in entry[1]):  # m2m tag-file query
+                        self.CURS.execute(f"SELECT tag FROM tagged_files_m2m WHERE file='{entry[2]}'")
+                        results.append(self.CURS.fetchall())
+
+                    # elif (entry[0] == "files") and ("group" in entry[1]):          # Cross query - get files from group
+                    #     self.CURS.execute(
+                    #         f"SELECT * FROM {entry[0]} WHERE file_id='{entry[2]}'")
+                    #     results.append(self.CURS.fetchall())
+                    #
+                    # elif (entry[0] == "tag_groups") and ("file" in entry[1]):      # Cross query - get groups from file
+                    #     pass
+                    else:
+                        errmsg = f"Retrieve '{entry[0]}' for property '{entry[1]}' not yet implemented"
+                        db_logger.warning(errmsg)
+                        results.append(None)
+                else:
+                    errmsg = f"'{entry[1]}' is not a valid property of {entry[0]}"
+                    db_logger.critical(errmsg)
+                    results.append(None)
+            else:
+                errmsg = f"Item '{entry[0]}' is not a valid database object"
+                db_logger.critical(errmsg)
+                results.append(None)
+        return results
+
+        # First implementation -> # TODO Refine the API to make sense across the CRUD ops
+        # if item not in ["file", "group", "tag"]:  # self._DEFINITION.keys()
+        #     errmsg = f"Item '{item}' is not a valid database object"
+        #     db_logger.critical(errmsg)
+        #     raise sqlite3.IntegrityError(errmsg)
+        #
+        # # TODO currently it is possible to specify items with different keywords, and have to iteratively loop over them
+        # #   and return. Write a sql join (or similar concept) function that can process a batch at once.
+        #
+        # if item == "file":
+        #     if len(values) == 0:
+        #         self.CURS.execute(f"SELECT file_id, file_path, file_hash_name FROM files")
+        #         return self.CURS.fetchall()
+        #     requested_files = []
+        #     for req_file in values:
+        #         # valid file properties = {'file_id', 'file_path', 'file_hash_name'}
+        #         prop = req_file.keys() & {'file_id', 'file_path', 'file_hash_name'}
+        #         if len(prop) == 0:
+        #             db_logger.critical(f"No valid file properties given: {req_file}")
+        #             requested_files.append(None)
+        #             continue
+        #         col = prop.pop()
+        #         try:
+        #             self.CURS.execute(f"SELECT file_id, file_path, file_hash_name FROM files WHERE {col}='{req_file[col]}'")
+        #         except Exception as e:          # Not too certain what all we may get here
+        #             db_logger.critical(f"Error '{e}' occurred during retrieval call for file object {req_file}")
+        #             requested_files.append(None)
+        #             continue
+        #         requested_files.extend(self.CURS.fetchall())        # return tuple objects for unique identifiers
+        #     return requested_files
+        #
+        # if item == "group":
+        #     if len(values) == 0:
+        #         self.CURS.execute(f"SELECT group_id, group_name FROM tag_groups")
+        #         return self.CURS.fetchall()
+        #     requested_groups = []
+        #     for req_group in values:
+        #         # valid file properties = {'group_id', 'group_name'}
+        #         prop = req_group.keys() & {'group_id', 'group_name'}
+        #         if len(prop) == 0:
+        #             db_logger.critical(f"No valid group properties given: {req_group}")
+        #             requested_groups.append(None)
+        #             continue
+        #         col = prop.pop()
+        #         try:
+        #             self.CURS.execute(f"SELECT group_id, group_name FROM tag_groups WHERE {col}='{req_group[col]}'")
+        #         except Exception as e:          # Not too certain what all we may get here
+        #             db_logger.critical(f"Error '{e}' occurred during retrieval call for group object {req_group}")
+        #             requested_groups.append(None)
+        #             continue
+        #         requested_groups.extend(self.CURS.fetchall())
+        #
+        # if item == "tag":
+        #     if len(values) == 0:
+        #         self.CURS.execute(f"SELECT tag_id, tag_name, tag_group FROM tags")
+        #         return self.CURS.fetchall()
+        #     requested_tags = []
+        #     for req_tag in values:
+        #         properties = req_tag.keys()
+        #         if "tag_id" in properties:      # get a unique tag by its id
+        #             try:
+        #                 self.CURS.execute(f"SELECT tag_id, tag_name, tag_group FROM tags WHERE tag_id='{req_tag['tag_id']}'")
+        #             except Exception as e:  # Not too certain what all we may get here
+        #                 db_logger.critical(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
+        #                 requested_tags.append(None)
+        #                 continue
+        #             requested_tags.extend(self.CURS.fetchall())
+        #             continue
+        #         if {"tag_name", "tag_group"} <= properties:     # Both properties need to be present to identify unique object
+        #             try:
+        #                 self.CURS.execute(
+        #                     f"SELECT tag_id, tag_name, tag_group FROM tags WHERE tag_name='{req_tag['tag_name']}' AND tag_group='{req_tag['tag_group']}'")
+        #             except Exception as e:  # Not too certain what all we may get here
+        #                 db_logger.critical(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
+        #                 requested_tags.append(None)
+        #                 continue
+        #             requested_tags.extend(self.CURS.fetchall())
+        #             continue
+
+    def update_entry(self, item, values: list):
+        # """
+        # """
+        #
+        # if item not in ["file", "group", "tag"]:        # self._DEFINITION.keys()
+        #     errmsg = f"Item '{item}' is not a valid database object"
+        #     db_logger.critical(errmsg)
+        #     raise sqlite3.IntegrityError(errmsg)
+        #
+        # if item == "file":
+        #
+        # if item == "group":
+        #     Database.CURSOR.execute(f'UPDATE tag_groups SET group_name="{new_name}" WHERE group_id={g.db_id}')
+        #     Database.CONNECTION.commit()
+        #     db_logger.info(f"Group '{g.name}' renamed to '{new_name}'")
+        #
+        # if item == "tag":
+        #     Database.CURSOR.execute(f'UPDATE tags SET tag_name="{new_name}" WHERE tag_id={t.db_id}')
+        #     Database.CONNECTION.commit()
+        #     db_logger.info(f"Tag '{t.name}' renamed to '{new_name}'")
+        pass
+
+    def delete_entry(self, item, values: list):
+        """
+        item -> specify the type of entry to make.      options: "file", "group", "tag"
+        values -> a list of dicts containing the parameters of the specified item
+            "file" : {'file_path': 'path to file object'}
+            "group" : {'group_name': 'name for a new group'}
+            "tag" : {'tag_name': 'name for new tag', 'group': int id of group}  -> in future support 'group_name' as txt
+        returns a list (in order) of newly created items id's -> if an entry failed, None instead
+        """
+
+        if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
+            errmsg = f"Item '{item}' is not a valid database object"
+            db_logger.critical(errmsg)
+            raise sqlite3.IntegrityError(errmsg)
+
+        if item == "file":
+            # TODO Should be able to delete files even if tagged.
+            success_resp = []
+            for rem_file in values:  # dict - prop_identifier (always "id")
+                try:
+                    # This SQL should cascade auto
+                    self.CURS.execute(f"DELETE FROM files WHERE file_id='{rem_file['file_id']}'")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    success_resp.append(False)
+                    continue
+                self.CONN.commit()
+                db_logger.info(f"Removed file '{rem_file['file_id']}' from database")
+                success_resp.append(True)
+            return success_resp
+
+        if item == "group":
+            success_resp = []
+            for rem_group in values:  # dict - prop_identifier (always "id")
+                try:
+                    self.CURS.execute(f"DELETE FROM tag_groups WHERE group_id='{rem_group['group_id']}'")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    success_resp.append(False)
+                    continue
+                self.CONN.commit()
+                db_logger.info(f"Group '{rem_group['group_id']}' removed from database")
+                success_resp.append(True)
+            return success_resp
+
+        if item == "tag":
+            # Must not be able to delete tags attached to files
+            success_resp = []
+            for rem_tag in values:  # dict - prop_identifier (always "id")
+                try:
+                    self.CURS.execute(f"DELETE FROM tags WHERE tag_id='{rem_tag['tag_id']}'")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    success_resp.append(False)
+                    continue
+                self.CONN.commit()
+                db_logger.info(f"Tag '{rem_tag['tag_id']}' removed from database")
+                success_resp.append(True)
+            return success_resp
+
+        if item == "tag-file":
+            success_resp = []
+            for unlink in values:  # dict - prop_identifier (always "id")
+                try:
+                    self.CURS.execute(
+                        f"DELETE FROM tagged_files_m2m WHERE tag='{unlink['tag_id']}' AND file='{unlink['file_id']}'")
+                except sqlite3.IntegrityError as errmsg:
+                    db_logger.critical(errmsg)
+                    success_resp.append(False)
+                    continue
+                self.CONN.commit()
+                db_logger.info(f"Untagged file '{unlink['file_id']}' from tag '{unlink['tag_id']}'")
+                success_resp.append(True)
+            return success_resp
+
+    # Files
+
+    # TODO Utility function to integrity check file_path, while keeping file_hash consistent ->
