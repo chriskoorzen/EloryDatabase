@@ -1,11 +1,9 @@
-from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy.uix.relativelayout import RelativeLayout
-from kivy.properties import DictProperty, ObjectProperty
-from kivy.uix.scrollview import ScrollView
+from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.textinput import TextInput
 from kivy.uix.treeview import TreeView, TreeViewNode, TreeViewLabel
 
@@ -18,33 +16,16 @@ class TagPane(RelativeLayout):
 
     def __init__(self, **kwargs):
         super(TagPane, self).__init__(**kwargs)
-        # Create Layout
-        self.add_widget(Label(text="Tag Manager", size_hint=(1, 0.06), size_hint_max_y=35, pos_hint={"top": 1}))
-        options_box = BoxLayout(pos_hint={"top": 0.94}, size_hint=(1, 0.06), orientation="horizontal")
-        options_box.add_widget(Button(text="Add New Group", on_press=self.add_group))
-        options_box.add_widget(Button(text="Delete Group", on_press=self.delete_group))
-        self.add_widget(options_box)
-
-        self.tree_root = TreeView(root_options={"text": "File Tags", "no_selection": True},
-                                  size_hint=(1, None))
-        self.tree_root.bind(minimum_height=self.tree_root.setter('height'))     # Auto update on height change
-        # self.tree_height = self.tree_root.minimum_height
-        viewport = ScrollView(pos_hint={"top": 0.85}, do_scroll_x=False, size_hint_y=0.79, scroll_type=["bars"])
-        viewport.add_widget(self.tree_root)
-        self.add_widget(viewport)
-
-        # Populate TreeView
-        self.init_treeview()
 
     def init_treeview(self):
         # Only adds all items once
         for item in db.TagManager.groups.values():
             group_node = GroupNode(db_object=item, add_tag_func=self.add_tag, del_tag_func=self.delete_tag)
-            self.tree_root.add_node(group_node)
+            self.ids["tree_root"].add_node(group_node)
             for child in item.tags.values():
                 tag_node = TagNode(db_object=child, on_double_press=self.set_selected_tag)
-                self.tree_root.add_node(tag_node, parent=group_node)
-            self.tree_root.toggle_node(group_node)      # Let default view be open nodes
+                self.ids["tree_root"].add_node(tag_node, parent=group_node)
+            self.ids["tree_root"].toggle_node(group_node)      # Let default view be open nodes
 
     def set_selected_tag(self, *args):
         # First arg is TagNode object
@@ -66,7 +47,7 @@ class TagPane(RelativeLayout):
                               size=(600, 200))
                 popup.open()
                 return
-            self.tree_root.add_node(
+            self.ids["tree_root"].add_node(
                 GroupNode(db_object=new_group, add_tag_func=self.add_tag, del_tag_func=self.delete_tag)
             )
 
@@ -101,7 +82,7 @@ class TagPane(RelativeLayout):
             for tag_node in tag_nodes:
                 try:
                     db.TagManager.delete_tag(tag_node.db_object.db_id)
-                    self.tree_root.remove_node(tag_node)
+                    self.ids["tree_root"].remove_node(tag_node)
                 except IntegrityError:
                     errmsg = Label(
                         text="Cannot delete tags attached to files.\nRemove tag from all files and try again\n")
@@ -112,11 +93,11 @@ class TagPane(RelativeLayout):
                     popup.open()
                     return
             db.TagManager.delete_group(group.db_id)
-            self.tree_root.remove_node(group_node)
+            self.ids["tree_root"].remove_node(group_node)
 
         del_options = TreeView(root_options={"text": "Tag Groups", "no_selection": True})
         reference = {}
-        for node in self.tree_root.root.nodes:
+        for node in self.ids["tree_root"].root.nodes:
             item = node.db_object
             reference[item.db_id] = [node, item]
             file_count = 0
@@ -143,8 +124,8 @@ class TagPane(RelativeLayout):
 
     def add_tag(self, *args):       # TODO partition out the "add new Tag node" and "create new Tag" functions
         # For use with the GroupNode button
-        db_obj_group = args[0].parent.db_object
-        parent_node = args[0].parent
+        db_obj_group = args[0].db_object
+        parent_node = args[0]
 
         def get_text_and_update(*arg):
             try:
@@ -157,7 +138,7 @@ class TagPane(RelativeLayout):
                               size=(600, 200))
                 popup.open()
                 return
-            self.tree_root.add_node(
+            self.ids["tree_root"].add_node(
                 TagNode(db_object=new_tag, on_double_press=self.set_selected_tag),
                 parent_node
             )
@@ -184,7 +165,7 @@ class TagPane(RelativeLayout):
 
     def delete_tag(self, *args):
         # For use with the GroupNode button
-        current_node = self.tree_root.selected_node
+        current_node = self.ids["tree_root"].selected_node
         if current_node is None:
             return
         try:
@@ -198,38 +179,24 @@ class TagPane(RelativeLayout):
                           size=(600, 200))
             popup.open()
             return
-        self.tree_root.remove_node(current_node)
+        self.ids["tree_root"].remove_node(current_node)
 
 
 # TODO create custom group label class -> tiny buttons to add and remove tags
 class GroupNode(TreeViewNode, BoxLayout):
+    display_name = StringProperty()
 
     def __init__(self, db_object, add_tag_func, del_tag_func, **kwargs):
         super(GroupNode, self).__init__(**kwargs)
         self.db_object = db_object
-        self.orientation = "horizontal"
-        self.height = 36        # Default TreeNode size is 28
-        # with self.canvas.before:
-        #     Color(0.5, 0.5, 0.5, 1)
-        #     self.background = Rectangle(size=self.size, pos=self.pos)
-        # self.bind(size=self._update_background, pos=self._update_background)
-
-        descript = Label(text=self.db_object.name, halign="left", valign="center")
-        descript.bind(size=descript.setter("text_size"))
-        self.add_widget(descript)
-
-        self.add_widget(Button(text=" + ", on_press=add_tag_func, size_hint_x=0.2))
-        self.add_widget(Button(text=" - ", on_press=del_tag_func, size_hint_x=0.2))
-        # super(TreeViewNode, self).__init__(**kwargs)
-        self.no_selection = True
-
-    def _update_background(self, instance, value):
-        self.background.pos = self.pos
-        self.background.size = self.size
+        self.add_tag_func = add_tag_func
+        self.del_tag_func = del_tag_func
+        self.display_name = self.db_object.name
 
 
 # TODO create custom tag label class -> register double clicks
 class TagNode(TreeViewNode, BoxLayout):
+    display_name = StringProperty()
 
     def __init__(self, db_object, **kwargs):
         super(TagNode, self).__init__(**kwargs)
@@ -239,13 +206,7 @@ class TagNode(TreeViewNode, BoxLayout):
             self.bind(on_double_press=kwargs.get("on_double_press"))
 
         self.db_object = db_object
-        self.orientation = "horizontal"
-        self.height = 28        # Default TreeNode size is 28
-        descript = Label(text=self.db_object.name, halign="left", valign="center")
-        descript.bind(size=descript.setter("text_size"))
-        self.add_widget(descript)
-
-        # super(TreeViewNode, self).__init__(**kwargs)
+        self.display_name = self.db_object.name
 
     # Implement Double Click functionality
     def on_touch_down(self, touch):

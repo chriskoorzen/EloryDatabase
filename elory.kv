@@ -1,24 +1,7 @@
 #: kivy 2.1.0
-# Class definition as ::=      < CustomClass @ BaseClass >
-# Class instantiation as ::=   Class:
-
-<FileNavigationPane>:
-    # Label:
-    #     text: "NavigationPane"
-
-<FileDisplayPane>:
-    # Label:
-    #     canvas.before:
-    #         Color:
-    #             rgba: 0.2, 0.2, 0.2, 0.5
-    #         Rectangle:
-    #             pos: self.pos
-    #             size: self.size
-    #     text: "DisplayPane"
-
-<TagPane>:
-    # Label:
-    #     text: "TagPane"
+#: include displayTagPane.kv
+#: include displayFileNavigator.kv
+#: include displayFilePane.kv
 
 <OptionsBar@Label>:
     canvas.before:
@@ -47,12 +30,15 @@
     BoxLayout:
         # size_hint_y: 0.94
         FileNavigationPane:
+            id: file_nav
             size_hint_x: 0.32
             size_hint_max_x: 385
             # on_size: print(self.width)
         FileDisplayPane:
+            id: file_display
             size_hint_x: 0.44
         TagPane:
+            id: tag_pane
             size_hint_x: 0.24
             size_hint_max_x: 290
             # on_size: print(self.width)

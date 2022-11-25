@@ -1,0 +1,31 @@
+
+<FileDisplayPane>:
+    Label:
+        text: "File Display"
+        size_hint: 1, 0.06
+        size_hint_max_y: 35
+        pos_hint: {"top": 1}
+    # Button:
+    #     text: "Save Changes"
+    #     size_hint: 0.25, 0.06
+    #     pos_hint: {"top": 0.94, 'right': 1}
+    BoxLayout:                                              # Image (file) display boundary box
+        padding: [0, 0, 0, 0]
+        size_hint: 1, 0.6
+        pos_hint: {"top": 0.92}
+        Image:
+            id: file_display
+            source: ""
+            canvas:
+                Color:
+                    rgba: 0.3, 0.3, 0.3, 0.5
+                Rectangle:
+                    size: file_display.size
+                    pos: file_display.pos
+    StackLayout:                                            # Active file's Tag display box
+        id: tag_display
+        size_hint: 1, 0.30
+        pos_hint: {"top": 0.28}
+        padding: 8
+        orientation: 'lr-tb'
+        spacing: 5

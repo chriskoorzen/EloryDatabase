@@ -1,0 +1,75 @@
+
+<FileNode>:
+    orientation: "horizontal"
+    height: 28                                                                  # Default TreeNode size is 28
+    Label:
+        text: root.display_name
+        halign: "left"
+        valign: "center"
+        text_size: self.size
+
+
+<FileNavigationPane>:
+    Label:
+        text: "File Navigator"
+        size_hint: 1, 0.06
+        size_hint_max_y: 35
+        pos_hint: {"top": 1}
+    BoxLayout:                                                                  # Switch between views
+        size_hint: 1, 0.06
+        pos_hint: {"top": 0.94}
+        orientation: 'horizontal'
+        ToggleButton:
+            text: "System Files"
+            group: "view_options"
+            state: 'down'
+            on_press: root.set_system_file_view(self, self.state)
+        ToggleButton:
+            text: "Database Files"
+            group: "view_options"
+            on_press: root.set_database_file_view(self, self.state)
+    FileChooserListView:                                                        # System Files View
+        id: system_files_view
+        size_hint: 1, 0.84
+        pos_hint: {"top": 0.85}
+        path: root.DEFAULT_SYSTEM_FILE
+        on_submit: root.add_system_file_to_db(self.selection)
+        on_selection: root.set_active_file_object(self.selection)
+
+    RelativeLayout:                                                             # Database File View
+        id: db_box
+        size_hint: 1, 0.85
+        pos_hint: {"top": 0.85}
+        Button:
+            text: "Remove file"                                                 # Delete db file
+            size_hint: 0.4, 0.06
+            pos_hint: {"top": 1, "right": 0.45}
+            on_press: root.remove_file_from_db()
+        BoxLayout:                                                              # Sorting options
+            size_hint: 0.5, 0.06
+            pos_hint: {"top": 1, "right": 1}
+            orientation: 'horizontal'
+            Label:
+                text: "Sort by : "
+                size_hint: 0.4, 1
+            Button:
+                text: "Folders"
+                size_hint: 0.3, 1
+                # on_press: self.db_tree.sort_by_folder
+            Button:
+                text: "Tags"
+                size_hint: 0.3, 1
+                # on_press: self.db_tree.sort_by_tags
+        ScrollView:
+            pos_hint: {"top": 0.92}
+            do_scroll_x: False
+            size_hint_y: 0.79
+            scroll_type: ["bars"]
+            DatabaseTree:                                                       # Tree Display
+                id: db_tree
+                root_options: {"text": "Database Files", "no_selection": True}
+                size_hint: 1, None
+                indent_level: 10
+                height: self.minimum_height
+                on_selected_node: root.set_active_file_object(self.selected_node)
+

@@ -17,17 +17,19 @@ from displayTagPane import TagPane
 from displayFileNavigator import FileNavigationPane
 from displayFilePane import FileDisplayPane
 
-# Not ideal -> because at some point "path" is a variable argument inside the app, to open and close databases
-db.connect_db('database/known.db')          # Connecting to database that does exist, tables match and columns match
-
 
 class RootWidget(BoxLayout):
     pass
 
 
 class EloryApp(App):
+
     def build(self):
-        return RootWidget()
+        db.connect_db('database/known.db')              # Load db for use -> fragile dependency on "db" variable
+        root = RootWidget()
+        root.ids["tag_pane"].init_treeview()            # Populate Tags TreeView
+        root.ids["file_nav"].init_database_tree()       # Populate Db Files TreeView
+        return root
 
     # Dirty method of passing parameters between classes -> ideally do in build() method
     def on_start(self):

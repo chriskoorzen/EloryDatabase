@@ -1,0 +1,60 @@
+
+<TagNode>:
+    orientation: "horizontal"
+    height: 28                                                      # Default TreeNode size is 28
+    Label:
+        id: display_label
+        text: root.display_name
+        halign: "left"
+        valign: "center"
+        text_size: self.size
+
+<GroupNode>:
+    orientation: "horizontal"
+    height: 36                                                      # Default TreeNode size is 28
+    # on_parent: print("G-node on_parent called", self.parent)      # This calls 7 times over?
+    no_selection: True
+    Label:
+        id: display_label
+        text: root.display_name
+        halign: "left"
+        valign: "center"
+        text_size: self.size
+    Button:                                                         # Add Tag Button
+        text: " + "
+        on_press: root.add_tag_func(root)
+        size_hint_x: 0.2
+    Button:                                                         # Remove Tag Button
+        text: " - "
+        on_press: root.del_tag_func()
+        size_hint_x: 0.2
+
+
+<TagPane>:
+    Label:
+        text: "Tag Manager"
+        size_hint: 1, 0.06
+        size_hint_max_y: 35
+        pos_hint: {"top": 1}
+    BoxLayout:                                      # Group Creation/Deletion
+        pos_hint: {"top": 0.94}
+        size_hint: 1, 0.06
+        orientation: "horizontal"
+        Button:
+            text: "Add New Group"
+            on_press: root.add_group()
+        Button:
+            text: "Delete Group"
+            on_press: root.delete_group()
+    ScrollView:                                     # Main Tag display
+        pos_hint: {"top": 0.85}
+        do_scroll_x: False
+        size_hint_y: 0.79
+        scroll_type: ["bars"]
+        TreeView:
+            id: tree_root
+            root_options: {"text": "File Tags", "no_selection": True}
+            size_hint: 1, None
+            height: self.minimum_height             # Auto update on height change to fit all children
+
+
