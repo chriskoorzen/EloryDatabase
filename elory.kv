@@ -2,15 +2,9 @@
 #: include displayTagPane.kv
 #: include displayFileNavigator.kv
 #: include displayFilePane.kv
+#: include modals.kv
 
-<OptionsBar@Label>:
-    canvas.before:
-        Color:
-            rgba: 0, 0.2, 0.5, 1
-        Rectangle:
-            pos: self.pos
-            size: self.size
-    text: "OptionsBar"
+<OptionsBar@BoxLayout>:
 
 <ActionLogBar@Label>:
     canvas.before:
@@ -23,22 +17,51 @@
 
 <RootWidget>:
     orientation: "vertical"
-    OptionsBar:
+    BoxLayout:                      # Options Bar
         size_hint_y: 0.06
         size_hint_max_y: 35
-        # on_size: print(self.height)
+        orientation: "horizontal"
+        Button:
+            size_hint: 0.1, 1
+            text: "Open DB"
+            on_press: root.open_db()
+        Button:
+            size_hint: 0.15, 1
+            text: "Create New DB"
+            on_press: root.create_new_db()
+        Label:
+            canvas.before:
+                Color:
+                    rgba: 0, 0.2, 0.5, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            text: "OptionsBar"
     BoxLayout:
-        # size_hint_y: 0.94
+        size_hint_y: 0.94
         FileNavigationPane:
             id: file_nav
-            size_hint_x: 0.32
-            size_hint_max_x: 385
+            db: root.db
+            groups: root.groups
+            tags: root.tags
+            files: root.files
+            size_hint_x: 0.30
+            size_hint_max_x: 350
             # on_size: print(self.width)
         FileDisplayPane:
             id: file_display
-            size_hint_x: 0.44
+            db: root.db
+            groups: root.groups
+            tags: root.tags
+            files: root.files
+            active_file: file_nav.active_selected_file                # bind
+            size_hint_x: 0.46
         TagPane:
             id: tag_pane
+            db: root.db
+            groups: root.groups
+            tags: root.tags
+            add_tag_func: file_display.add_new_tag          # Pass dbl click func for TagNode objects
             size_hint_x: 0.24
             size_hint_max_x: 290
             # on_size: print(self.width)

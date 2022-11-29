@@ -1,7 +1,7 @@
 
 <FileNode>:
     orientation: "horizontal"
-    height: 28                                                                  # Default TreeNode size is 28
+    height: 28                                                                          # Default TreeNode size is 28
     Label:
         text: root.display_name
         halign: "left"
@@ -11,65 +11,78 @@
 
 <FileNavigationPane>:
     Label:
+        id: pane_name
         text: "File Navigator"
         size_hint: 1, 0.06
         size_hint_max_y: 35
         pos_hint: {"top": 1}
-    BoxLayout:                                                                  # Switch between views
+    BoxLayout:                                                                  # View Options
+        id: view_options_box
         size_hint: 1, 0.06
-        pos_hint: {"top": 0.94}
+        size_hint_max_y: 40
+        pos_hint: {"top": 0.94} # {"top": pane_name.}
         orientation: 'horizontal'
         ToggleButton:
             text: "System Files"
             group: "view_options"
-            state: 'down'
-            on_press: root.set_system_file_view(self, self.state)
+            on_press: view_manager.current = "system_files"
         ToggleButton:
+            id: default_view                                                            # default view option
             text: "Database Files"
             group: "view_options"
-            on_press: root.set_database_file_view(self, self.state)
-    FileChooserListView:                                                        # System Files View
-        id: system_files_view
-        size_hint: 1, 0.84
-        pos_hint: {"top": 0.85}
-        path: root.DEFAULT_SYSTEM_FILE
-        on_submit: root.add_system_file_to_db(self.selection)
-        on_selection: root.set_active_file_object(self.selection)
+            on_press: view_manager.current = "database_files"
+    ScreenManager:
+        id: view_manager
+        Screen:
+            name: "system_files"
+            FileChooserListView:                                                # System Files View
+                id: system_files_view
+                size_hint: 1, 0.84
+                pos_hint: {"top": 0.85}
+                path: root.system_view_path                                          # default system view folder
+                on_submit: root.add_system_file_to_db(self.selection)                   # double click to add to db
+                on_selection: root.set_active_file_object(self.selection)               # single click to view
 
-    RelativeLayout:                                                             # Database File View
-        id: db_box
-        size_hint: 1, 0.85
-        pos_hint: {"top": 0.85}
-        Button:
-            text: "Remove file"                                                 # Delete db file
-            size_hint: 0.4, 0.06
-            pos_hint: {"top": 1, "right": 0.45}
-            on_press: root.remove_file_from_db()
-        BoxLayout:                                                              # Sorting options
-            size_hint: 0.5, 0.06
-            pos_hint: {"top": 1, "right": 1}
-            orientation: 'horizontal'
-            Label:
-                text: "Sort by : "
-                size_hint: 0.4, 1
+        Screen:                                                                 # Database Files View
+            id: database_files_view
+            name: "database_files"
+            size_hint: 1, 0.85
+            pos_hint: {"top": 0.85}
             Button:
-                text: "Folders"
-                size_hint: 0.3, 1
-                # on_press: self.db_tree.sort_by_folder
-            Button:
-                text: "Tags"
-                size_hint: 0.3, 1
-                # on_press: self.db_tree.sort_by_tags
-        ScrollView:
-            pos_hint: {"top": 0.92}
-            do_scroll_x: False
-            size_hint_y: 0.79
-            scroll_type: ["bars"]
-            DatabaseTree:                                                       # Tree Display
-                id: db_tree
-                root_options: {"text": "Database Files", "no_selection": True}
-                size_hint: 1, None
-                indent_level: 10
-                height: self.minimum_height
-                on_selected_node: root.set_active_file_object(self.selected_node)
+                text: "Remove file"                                                     # delete db file
+                size_hint: 0.4, 0.06
+                pos_hint: {"top": 1, "right": 0.45}
+                on_press: root.remove_file_from_db(db_tree.selected_node)               # Delete "selected" node from db
+            BoxLayout:
+                size_hint: 0.5, 0.06
+                pos_hint: {"top": 1, "right": 1}
+                orientation: 'horizontal'
+                Label:                                                          # Sorting Options
+                    text: "Sort by : "
+                    size_hint: 0.4, 1
+                ToggleButton:
+                    text: "Folders"
+                    group: "sort_options"
+                    allow_no_selection: False
+                    size_hint: 0.3, 1
+                    on_press: root.sort_by_folder()
+                ToggleButton:
+                    id: default_sort                                                    # default sort option
+                    text: "Tags"
+                    group: "sort_options"
+                    allow_no_selection: False
+                    size_hint: 0.3, 1
+                    on_press: root.sort_by_tags()
+            ScrollView:
+                pos_hint: {"top": 0.92}
+                do_scroll_x: False
+                size_hint_y: 0.79
+                scroll_type: ["bars"]
+                DatabaseTree:                                                   # Tree Display
+                    id: db_tree
+                    root_options: {"text": "Database Files", "no_selection": True}
+                    size_hint: 1, None
+                    # indent_level: 16                                                  # default is 16
+                    height: self.minimum_height
+                    on_selected_node: root.set_active_file_object(self.selected_node)
 

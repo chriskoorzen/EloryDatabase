@@ -5,20 +5,22 @@
         size_hint: 1, 0.06
         size_hint_max_y: 35
         pos_hint: {"top": 1}
-    # Button:
-    #     text: "Save Changes"
-    #     size_hint: 0.25, 0.06
-    #     pos_hint: {"top": 0.94, 'right': 1}
+    Button:
+        text: "Save Changes"
+        size_hint: 0.3, 0.06
+        size_hint_max_y: 40
+        pos_hint: {"top": 0.94, 'right': 1}
+        on_press: root.save_changes()
     BoxLayout:                                              # Image (file) display boundary box
         padding: [0, 0, 0, 0]
         size_hint: 1, 0.6
-        pos_hint: {"top": 0.92}
+        pos_hint: {"top": 0.88}
         Image:
             id: file_display
             source: ""
             canvas:
                 Color:
-                    rgba: 0.3, 0.3, 0.3, 0.5
+                    rgba: 0.3, 0.3, 0.3, 0.1
                 Rectangle:
                     size: file_display.size
                     pos: file_display.pos
@@ -29,3 +31,11 @@
         padding: 8
         orientation: 'lr-tb'
         spacing: 5
+
+
+<TagButton>:
+    # text: {tag.name}
+    # color: show status
+    size_hint: None, None
+    padding: (12, 12)
+    size: self.texture_size

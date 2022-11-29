@@ -8,47 +8,135 @@ from kivy import require as kivy_require
 kivy_require("2.1.0")
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
+from kivy.properties import DictProperty, ObjectProperty, StringProperty
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
+from os import sep, getcwd
+from os.path import expanduser, isfile
+from sqlite3 import DatabaseError
 
-from databaseManagers import Database as db
+from elorydb import Database
+from databaseObjects import TagGroup, Tag, File
+from modals import SelectSystemObject, UserInputBox
 from displayTagPane import TagPane
 from displayFileNavigator import FileNavigationPane
 from displayFilePane import FileDisplayPane
 
 
 class RootWidget(BoxLayout):
-    pass
+    HOME_DIR = StringProperty()                         # User's Home Directory
+    DATA_DIR = StringProperty()                         # HOME/'Elory': Store app data eg. databases
+    APP_DIR = StringProperty()                          # Where app is located
+
+    current_db = StringProperty()                       # Hold path to current open db file
+
+    db = ObjectProperty(Database())
+    files = DictProperty({})
+    groups = DictProperty({})
+    tags = DictProperty({})
+
+    def __init__(self, home_dir, app_dir, **kwargs):
+        super(RootWidget, self).__init__(**kwargs)
+        self.HOME_DIR = home_dir
+        self.DATA_DIR = home_dir + sep + "Elory"
+        self.APP_DIR = app_dir
+        print("RootWidget init")
+        # print("RootWidget db:", hex(id(self.db)))
+        # print("RootWidget files:", hex(id(self.files)))
+        # print("RootWidget groups:", hex(id(self.groups)))
+        # print("RootWidget tags:", hex(id(self.tags)))
+        self.ids["file_nav"].change_system_view_path(self.HOME_DIR)
+
+        # Create and load default Database if not exists
+        if isfile(self.DATA_DIR + sep + "elory.edb"):            # TODO call load function if a current database exists
+            print("File exists")
+            self.load_database(self.DATA_DIR + sep + "elory.edb")
+
+    def on_kv_post(self, base_widget):
+        print("RootWidget on_kv_post")
+        # print("RootWidget db:", hex(id(self.db)))
+        # print("RootWidget files:", hex(id(self.files)))
+        # print("RootWidget groups:", hex(id(self.groups)))
+        # print("RootWidget tags:", hex(id(self.tags)))
+
+        pass
+
+    def load_database(self, path):
+        self.files.clear()
+        self.tags.clear()
+        self.groups.clear()
+
+        try:
+            self.db.connect_db(path)
+        except DatabaseError as emsg:
+            self.ids["tag_pane"].load_objects()     # Calling load with empty dicts will clear view of previous widgets
+            self.ids["file_nav"].load_objects()
+            print(f"error opening new database: {emsg}")
+            return
+        self.current_db = path                      # Success - set path
+
+        groups, tags, files = self.db.read_entry([("tag_groups", "all"), ("tags", "all"), ("files", "all")])
+        for group in groups:
+            self.groups[group[0]] = TagGroup(group[0], group[1], group[2])
+
+        for tag in tags:
+            self.tags[tag[0]] = Tag(tag[0], tag[1], tag[2], tag[3])
+
+        for file in files:
+            self.files[file[0]] = File(file[0], file[1], file[2], file[3])
+
+        self.ids["tag_pane"].load_objects()
+        self.ids["file_nav"].load_objects()
+
+    def open_db(self):
+        def open_(*args):
+            self.load_database(args[1][0])
+
+        # Open modal view and select a db file
+        d = SelectSystemObject(heading="Select Database", submit_call=open_, path=self.APP_DIR, dirselect=False)
+        d.open()
+
+    def create_new_db(self):
+
+        def create(*args):
+            new_name = args[1]
+            path = self.DATA_DIR + sep + new_name
+            new_db = self.db.create_new_db(path)
+            self.load_database(new_db)
+
+        info = "Choose new database name"
+        d = UserInputBox(heading="Create New Database", info=info, submit_call=create)
+        d.open()
 
 
 class EloryApp(App):
 
     def build(self):
-        db.connect_db('database/known.db')              # Load db for use -> fragile dependency on "db" variable
-        root = RootWidget()
-        root.ids["tag_pane"].init_treeview()            # Populate Tags TreeView
-        root.ids["file_nav"].init_database_tree()       # Populate Db Files TreeView
+        print("App build start..")
+
+        # Dev variables
+        home_dir = "/home/student/PycharmProjects/elory"
+        app_dir = "/home/student/PycharmProjects/elory"
+
+        # Prod variables
+        # home_dir = expanduser("~")
+        # app_dir = getcwd()
+
+        root = RootWidget(home_dir, app_dir)
+
+        print("App build done..")
         return root
 
-    # Dirty method of passing parameters between classes -> ideally do in build() method
     def on_start(self):
-        self.title = "Elory - Elephant Memory File Manager"
-        # print(self.root.children[0].children)
-        # Child[0] = TagPane; Child[1] = FileDisplayPane; Child[2] = FileNavigationPane
-        # Pass FileObject to Display Pane -> Select file for display
-        callback = self.root.children[1].children[1].set_active_object              # get f() from FileDisplayPane
-        self.root.children[1].children[2].bind(active_selected_file=callback)       # bind to prop of FileNavigationPane
-
-        # Pass TagObject to DisplayPane -> Add new tags to files
-        callback = self.root.children[1].children[1].get_selected_tag               # get f() from FileDisplayPane
-        self.root.children[1].children[0].bind(selected_tag=callback)               # bind to prop of TagPane
+        self.title = "Elory - The Elephant Memory Database"
         pass
 
     def on_stop(self):
         # introspect App properties
-        print("App directory:", self.directory)
-        print("User Data directory eg. settings, prefs etc. :", self.user_data_dir)
+        # print("App directory:", self.directory)
+        # print("User Data directory eg. settings, prefs etc. :", self.user_data_dir)
+        pass
 
 
 if __name__ == "__main__":

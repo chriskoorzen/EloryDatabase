@@ -23,58 +23,48 @@ class DatabaseObject:
 
 class TagGroup(DatabaseObject):
 
-    def __init__(self,  db_id: int, name: str):
+    def __init__(self,  db_id: int, name: str, tags=[]):
         super().__init__(db_id)
         self.name = name
-        self.tags = dict()
+        self.tags = set()
+        for i in tags:
+            self.tags.add(i)
 
     def __repr__(self):
-        final = f"<{self.__class__} : {self.name} : id {self.db_id} : tags {self.tags.keys()}>"
+        final = f"<{self.__class__} : {self.name} : id {self.db_id}>"
         return final
 
 
 class Tag(DatabaseObject):
 
-    def __init__(self,  db_id: int, name: str, group: TagGroup):
+    def __init__(self,  db_id: int, name: str, group: TagGroup, files=[]):
         super().__init__(db_id)
         self.name = name
         self.group = group
-        self.files = dict()
+        self.files = set()
+        for i in files:
+            self.files.add(i)
 
     def __repr__(self):
-        final = f"<{self.__class__} : {self.name} : id {self.db_id} : files {self.files.keys()}>"
+        final = f"{self.__class__} : {self.name} : id {self.db_id} : files {self.files}"
         return final
 
 
 class File(DatabaseObject):
 
-    def __init__(self,  db_id: int, path: str, hash_id: str):
+    def __init__(self,  db_id: int, path: str, hash_id: str, tags=[]):
         super().__init__(db_id)
         self.path = path
         self.name = basename(self.path)
         self.hash_id = hash_id
-        self.tags = dict()
+        self.tags = set()
+        for i in tags:
+            self.tags.add(i)
+
+    def get_groups(self):
+        for tag in self.tags:
+            pass
 
     def __repr__(self):
-        final = f"<{self.__class__} : {self.hash_id} : id {self.db_id} : files {self.tags.keys()}>"
+        final = f"<{self.__class__} : {self.hash_id} : id {self.db_id}>"
         return final
-
-    @staticmethod
-    def digest(file):
-        """Return a unique hash code of a given file.
-
-        The return must be unique to the file itself, should be platform-agnostic and resilient to meta-data changes.
-        The goal is to identify a particular file (defined as a series of bits) regardless of the OS, underlying fs,
-        or system architecture.
-        """
-        if not isfile(file):
-            logging.warning(f"{file} is not a valid file")
-            return
-        h = hashlib.md5()
-        b = bytearray(128*1024)
-        mv = memoryview(b)      # using memoryview, we can slice a buffer without copying it
-
-        with open(file, 'rb', buffering=0) as file_obj:
-            while n := file_obj.readinto(mv):
-                h.update(mv[:n])
-        return h.hexdigest()

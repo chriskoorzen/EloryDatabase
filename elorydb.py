@@ -87,6 +87,7 @@ class Database:
         if default_values:
             # TODO call create function with default values
             db_logger.info(f"Initialized default values for database '{self.PATH}'")
+            print(NotImplemented)
             pass
 
     def _disconnect(self):
@@ -122,6 +123,7 @@ class Database:
         return True  # All checks passed
 
     # TODO do not let database accept empty or funny strings. Sanitize for sql injection
+    #   App will crash on " ' " (single-quote, perhaps double quoted?) in text
     def _sanitize_names(name):
         if name == '' or name == ' ':
             errmsg = "Name cannot be empty or special characters. Alpha-Numeric only"
@@ -149,7 +151,7 @@ class Database:
 
     # Database management
     def create_new_db(self, path, default_values=True):
-
+        # TODO reject names with special characters
         if os.path.isfile(path):  # reject existing files
             # TODO or directories must also be rejected
             db_logger.critical(f"File '{path}' already exists.")
@@ -166,6 +168,7 @@ class Database:
         self.CURS.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
         self.CONN.commit()
         db_logger.info(f"Database '{self.PATH}' creation complete and ready for operation")
+        return self.PATH
 
     def connect_db(self, path):
 
@@ -180,7 +183,7 @@ class Database:
 
         # Check if file is valid sqlite3 database
         self.CURS.execute("PRAGMA schema_version")  # Will fail with 'sqlite3.DatabaseError' if invalid file
-        db_logger.info(f"Connected to database '{self.PATH}' ...")
+        db_logger.info(f"Connecting to database '{self.PATH}' ...")
 
         # Is this db empty?
         if self.CURS.fetchone()[0] == 0:  # Database is valid but empty -> abort connection
@@ -244,8 +247,8 @@ class Database:
                 'group': int id of group                  -> in future support 'group_name' as txt
             }
             "tag-file": {
-                'file': int file_id
-                'tag':  int tag_id
+                'file_id': int file_id
+                'tag_id':  int tag_id
             }
         returns a list (in order) of newly created items id's or True -> if an entry failed, None (or False?) instead
         """
@@ -273,7 +276,7 @@ class Database:
                     newly_created_files.append(None)
                     continue
                 self.CONN.commit()
-                newly_created_files.append(self.CURS.lastrowid)
+                newly_created_files.append((self.CURS.lastrowid, unique_hash))
                 db_logger.info(f"Added file '{new_file['file_path']}' to database")
             return newly_created_files
 
@@ -315,14 +318,14 @@ class Database:
             for link in values:
                 try:
                     self.CURS.execute(
-                        f"INSERT INTO tagged_files_m2m (tag, file) VALUES ('{link['tag']}', '{link['file']}')")
+                        f"INSERT INTO tagged_files_m2m (tag, file) VALUES ('{link['tag_id']}', '{link['file_id']}')")
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
                     newly_linked_tag_files.append(None)
                     continue
                 self.CONN.commit()
                 newly_linked_tag_files.append(self.CURS.lastrowid)
-                db_logger.info(f"Linked tag '{link['tag']}' to file '{link['file']}'")
+                db_logger.info(f"Linked tag '{link['tag_id']}' to file '{link['file_id']}'")
             return newly_linked_tag_files
 
     def read_entry(self, values: list = []):
@@ -360,14 +363,30 @@ class Database:
             'group_name': str                           -> return all tags associated with this group       (list)
         }
         """
-        valid_props = {'group_id', 'group_name', 'tag_id', 'tag_name', 'file_id', 'file_hash_name', 'file_path'}
+        valid_props = {'group_id', 'group_name', 'tag_id', 'tag_name', 'file_id', 'file_hash_name', 'file_path', 'tag_group', 'file'}
         valid_items = {"files", "tag_groups", "tags"}
         results = []
         for entry in values:  # Expect a tuple ( "item", "property", "prop_value" )
             if entry[0] in valid_items:
                 if entry[1] == 'all':  # return all items of type
                     self.CURS.execute(f"SELECT * FROM {entry[0]}")
-                    results.append(self.CURS.fetchall())
+                    res = self.CURS.fetchall()
+                    ans = []
+                    for item in res:
+                        if entry[0] == "files":
+                            self.CURS.execute(f"SELECT tag FROM tagged_files_m2m WHERE file='{item[0]}'")
+                            ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
+                            pass
+                        if entry[0] == "tags":
+                            self.CURS.execute(f"SELECT file FROM tagged_files_m2m WHERE tag='{item[0]}'")
+                            ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
+                            # ans.append((*item, self.CURS.fetchall()))
+                            pass
+                        if entry[0] == "tag_groups":
+                            self.CURS.execute(f"SELECT tag_id FROM tags WHERE tag_group='{item[0]}'")
+                            ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
+                            pass
+                    results.append(ans)
 
                 elif entry[1] in valid_props:
                     if entry[1] in self._DEFINITION[entry[0]][0]:  # inside its own table
@@ -375,11 +394,11 @@ class Database:
                         results.append(self.CURS.fetchall())
 
                     elif (entry[0] == "files") and (entry[1] == "tag_id"):  # m2m tag-file query
-                        self.CURS.execute(f"SELECT file FROM tagged_files_m2m WHERE tag='{entry[2]}'")
+                        self.CURS.execute(f"SELECT file, tag FROM tagged_files_m2m WHERE tag='{entry[2]}'")
                         results.append(self.CURS.fetchall())
 
                     elif (entry[0] == "tags") and ("file" in entry[1]):  # m2m tag-file query
-                        self.CURS.execute(f"SELECT tag FROM tagged_files_m2m WHERE file='{entry[2]}'")
+                        self.CURS.execute(f"SELECT tag, file FROM tagged_files_m2m WHERE file='{entry[2]}'")
                         results.append(self.CURS.fetchall())
 
                     # elif (entry[0] == "files") and ("group" in entry[1]):          # Cross query - get files from group
@@ -508,9 +527,9 @@ class Database:
         """
         item -> specify the type of entry to make.      options: "file", "group", "tag"
         values -> a list of dicts containing the parameters of the specified item
-            "file" : {'file_path': 'path to file object'}
-            "group" : {'group_name': 'name for a new group'}
-            "tag" : {'tag_name': 'name for new tag', 'group': int id of group}  -> in future support 'group_name' as txt
+            "file" : {'file_id': int}
+            "group" : {'group_id': int}
+            "tag" : {'tag_id': int}
         returns a list (in order) of newly created items id's -> if an entry failed, None instead
         """
 

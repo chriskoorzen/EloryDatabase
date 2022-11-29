@@ -2,7 +2,7 @@
 import unittest
 import sqlite3
 import os
-from databaseManagers import Database, db_logger
+from elorydb import Database, db_logger
 
 
 # --- DB Connection Tests ---

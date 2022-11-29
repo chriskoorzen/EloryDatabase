@@ -4,7 +4,7 @@
     height: 28                                                      # Default TreeNode size is 28
     Label:
         id: display_label
-        text: root.display_name
+        text: root.text
         halign: "left"
         valign: "center"
         text_size: self.size
@@ -16,7 +16,7 @@
     no_selection: True
     Label:
         id: display_label
-        text: root.display_name
+        text: root.text
         halign: "left"
         valign: "center"
         text_size: self.size
@@ -36,9 +36,10 @@
         size_hint: 1, 0.06
         size_hint_max_y: 35
         pos_hint: {"top": 1}
-    BoxLayout:                                      # Group Creation/Deletion
+    BoxLayout:                                      # Group Creation/Deletion Buttons
         pos_hint: {"top": 0.94}
         size_hint: 1, 0.06
+        size_hint_max_y: 40
         orientation: "horizontal"
         Button:
             text: "Add New Group"
@@ -46,15 +47,13 @@
         Button:
             text: "Delete Group"
             on_press: root.delete_group()
-    ScrollView:                                     # Main Tag display
+    ScrollView:                                     # Main Tag display View
         pos_hint: {"top": 0.85}
         do_scroll_x: False
         size_hint_y: 0.79
         scroll_type: ["bars"]
-        TreeView:
+        RecycleTree:
             id: tree_root
             root_options: {"text": "File Tags", "no_selection": True}
             size_hint: 1, None
             height: self.minimum_height             # Auto update on height change to fit all children
-
-
