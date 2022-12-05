@@ -18,7 +18,7 @@ from sqlite3 import DatabaseError
 
 from elorydb import Database
 from databaseObjects import TagGroup, Tag, File
-from modals import SelectSystemObject, UserInputBox
+from modals import SelectSystemObject, UserInputBox, Notification
 from displayTagPane import TagPane
 from displayFileNavigator import FileNavigationPane
 from displayFilePane import FileDisplayPane
@@ -72,19 +72,13 @@ class RootWidget(BoxLayout):
         except DatabaseError as emsg:
             self.ids["tag_pane"].load_objects()     # Calling load with empty dicts will clear view of previous widgets
             self.ids["file_nav"].load_objects()
-            print(f"error opening new database: {emsg}")
+            n = Notification("Error opening database", info=str(emsg))
+            n.open()
             return
         self.current_db = path                      # Success - set path
 
-        groups, tags, files = self.db.read_entry([("tag_groups", "all"), ("tags", "all"), ("files", "all")])
-        for group in groups:
-            self.groups[group[0]] = TagGroup(group[0], group[1], group[2])
-
-        for tag in tags:
-            self.tags[tag[0]] = Tag(tag[0], tag[1], tag[2], tag[3])
-
-        for file in files:
-            self.files[file[0]] = File(file[0], file[1], file[2], file[3])
+        self.groups, self.tags = TagGroup.load_tag_collection(self.db)
+        self.files = File.load_files(self.db, self.tags)
 
         self.ids["tag_pane"].load_objects()
         self.ids["file_nav"].load_objects()
