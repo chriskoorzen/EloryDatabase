@@ -34,17 +34,18 @@ class FileDisplayPane(RelativeLayout):
 
     def on_active_file(self, *args):
         # Display the selected file - gets update from File Manager
-        self.ids["file_display"].source = self.active_file.path
+        self.ids["file_display"].source = self.active_file
         if not self.ids["file_display"]._coreimage:     # No convenient exposed property to see if image failed to load
             print("This failed to load - Set a default image for failure")
 
         # Load tags of selected file
-        self.ids["tag_display"].clear_widgets()
-        self.active_tags.clear()
-        for tag in self.active_file.tags:
-            display_tag = TagButton(0, self.tags[tag], on_press=self.toggle_tag_status)
-            self.active_tags[tag] = display_tag      # Loaded tags status = 0 (no change)
-            self.ids["tag_display"].add_widget(display_tag)
+        self.ids["tag_display"].clear_widgets()         # Clear the display widget
+        self.active_tags.clear()                        # Clear the list of modified tags
+        if self.active_file in self.files:              # Does this file exist in the db?
+            for tag in self.files[self.active_file].tags.values():
+                display_tag = TagButton(0, tag, on_press=self.toggle_tag_status)
+                self.active_tags[tag.db_id] = display_tag      # Loaded tags status = 0 (no change)
+                self.ids["tag_display"].add_widget(display_tag)
 
     def toggle_tag_status(self, tag_button):
         """
@@ -75,24 +76,23 @@ class FileDisplayPane(RelativeLayout):
             self.ids["tag_display"].add_widget(display_tag)
 
     def save_changes(self):
-        mod_file = self.active_file
-        if (type(mod_file) == type) and (len(self.active_tags) > 0):
-            # This is an anon object, has not been added to db yet
-            try:
-                file_id, file_hash = self.db.create_entry("file", [{'file_path': mod_file.path}])[0]  # Expect a list with 1 tuple
-            except IntegrityError as errmsg:
-                print("Cannot add this file to database:", errmsg)
+
+        # Add the file if not in db
+        if self.active_file not in self.files:
+            new_file = File.new_file(self.active_file, self.db)
+            if not new_file:
+                print("Error")
                 return
-            except TypeError as errmsg:
-                print("Cant unpack tuple because:", errmsg)
-                return
+            mod_file = new_file
             # Update Model
-            mod_file = File(file_id, mod_file.path, file_hash)
-            self.files[file_id] = mod_file
+            self.files[new_file.path] = new_file
             # Update View ?
+        else:
+            mod_file = self.files[self.active_file]
 
         add_list = []
         del_list = []
+        # Read the mod parameters of the tags in the display pane
         for tag_btn in self.active_tags.values():       # Values expected: [status: int, tag_btn: TagButton]
             # print("Tag status:", status, " -- tag:", tag_btn)
             if not tag_btn.status:
@@ -102,28 +102,18 @@ class FileDisplayPane(RelativeLayout):
                 add_list.append(tag_btn)
             elif tag_btn.status == -1:
                 del_list.append(tag_btn)
-        # TODO What if an insertion or deletion fails?
-        try:
-            self.db.create_entry("tag-file", [{'file_id': mod_file.db_id, 'tag_id': x.tag.db_id} for x in add_list])
-        except IntegrityError as errmsg:
-            print(errmsg)
-            return
-        # link tags to files
+
+        # Add tags
+        mod_file.add_tags(self.db, *[x.tag for x in add_list])
+        # Update tag display
         for i in add_list:
-            mod_file.tags.add(i.tag.db_id)
-            i.tag.files.add(mod_file.db_id)
             i.color = [1, 1, 1, 1]      # Update View, White
             i.status = 0                # Update Model
 
-        try:
-            self.db.delete_entry("tag-file", [{'file_id': mod_file.db_id, 'tag_id': x.tag.db_id} for x in del_list])
-        except IntegrityError as errmsg:
-            print(errmsg)
-            return
-        # link tags to files
+        # Delete tags
+        mod_file.remove_tags(self.db, *[x.tag for x in del_list])
+        # Update tag display
         for i in del_list:
-            mod_file.tags.remove(i.tag.db_id)
-            i.tag.files.remove(mod_file.db_id)
             self.ids["tag_display"].remove_widget(i)    # Update View
             del self.active_tags[i.tag.db_id]           # Update Model
 

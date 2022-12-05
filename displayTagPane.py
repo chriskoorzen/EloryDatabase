@@ -54,14 +54,13 @@ class TagPane(RelativeLayout):
 
         def add(*args):
             new_name = args[1]
-            try:
-                group_id = self.db.create_entry("group", [{"group_name": new_name}])[0]
-            except sqlite3.IntegrityError as e:
-                print(e)
+            new_group = TagGroup.new_group(self.db, new_name)
+            if new_group is None:
+                print("Error TagPane")
                 return
+
             # Update Model
-            new_group = TagGroup(group_id, new_name)
-            self.groups[group_id] = new_group
+            self.groups[new_group.name] = new_group
             # Update View
             group_node = GroupNode(db_object=new_group, add_tag_func=self.add_tag, del_tag_func=self.delete_tag)
             self.ids["tree_root"].add_node(group_node)
@@ -78,17 +77,12 @@ class TagPane(RelativeLayout):
     def delete_group(self):      # TODO prevent the deletion of a group if even one tag has links?
 
         def delete(*args):
-            group_id = name_to_id[args[1]]
-            try:
-                success = self.db.delete_entry("group", [{"group_id": group_id}])[0]
-            except sqlite3.IntegrityError as e:
-                print(e)
-                return
-            if not success:
-                print("error")
+            group = self.groups[args[1]]
+            if not group.delete(self.db):
+                print("error deleting group")
                 return
             # Update Model
-            del self.groups[group_id]
+            del self.groups[args[1]]
             # Update View
             for node in self.ids["tree_root"].iterate_all_nodes():
                 if node.text == args[1]:
@@ -97,9 +91,8 @@ class TagPane(RelativeLayout):
 
         heading = "Delete Group"
         list_heading = ""
-        name_to_id = {x.name: x.db_id for x in self.groups.values()}
         d = SelectFromList(heading=heading, list_heading=list_heading,
-                           item_list=[x for x in name_to_id.keys()],
+                           item_list=[x for x in self.groups.keys()],
                            submit_call=delete)
         d.open()
 
@@ -108,20 +101,12 @@ class TagPane(RelativeLayout):
 
         def add(*args):
             print(*args)
-            try:
-                tag_id = self.db.create_entry("tag", [{'tag_name': args[1], 'group': group_node.db_object.db_id}])[0]
-            except IntegrityError as e:
-                print(e)
-                # errmsg = Label(text="Invalid name.\nTag names cannot be empty, must be alphanumeric characters only\n and be unique within a Group")
-                # popup = Popup(title="Error",
-                #               content=errmsg,
-                #               size_hint=(None, None),
-                #               size=(600, 200))
-                # popup.open()
+            new_tag = group_node.db_object.create_tag(self.db, args[1])
+            if not new_tag:
+                print("error crating new tag")
                 return
             # Update Model
-            new_tag = Tag(tag_id, args[1], group_node.db_object)
-            self.tags[tag_id] = new_tag
+            self.tags[new_tag.db_id] = new_tag
             # Update View
             self.ids["tree_root"].add_node(TagNode(new_tag, on_double_press=self.add_tag_func), parent=group_node)
 
@@ -134,25 +119,14 @@ class TagPane(RelativeLayout):
     def rename_tag(self):
         pass
 
-    def delete_tag(self):
+    def delete_tag(self):   # TODO should pass group node
         # For use with the GroupNode button
         current_node = self.ids["tree_root"].selected_node
         if current_node is None:
             return
-        try:
-            success = self.db.delete_entry("tag", [{"tag_id": current_node.db_object.db_id}])[0]
-        except IntegrityError as e:
-            print(e)
-            # errmsg = Label(
-            #     text="Cannot delete tags attached to files.\nRemove tag from all files and try again")
-            # popup = Popup(title="Error",
-            #               content=errmsg,
-            #               size_hint=(None, None),
-            #               size=(600, 200))
-            # popup.open()
-            return
+        success = current_node.db_object.group.delete_tag(self.db, current_node.db_object)
         if not success:
-            print("error")
+            print("error deleting tag")
             return
         # Update Model
         del self.tags[current_node.db_object.db_id]

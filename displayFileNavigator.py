@@ -69,45 +69,36 @@ class FileNavigationPane(RelativeLayout):
         untagged = TreeViewLabel(text="Untagged Files", no_selection=True)
         self.ids["db_tree"].add_node(untagged)
         self.ids["db_tree"].toggle_node(untagged)
-        display = {}        # Only add Groups and Tags of tagged files - avoid adding empty tags
         for file in self.files.values():
             if not file.tags:
                 file_node = FileNode(file, no_selection=False)
                 self.ids["db_tree"].add_node(file_node, parent=untagged)
-        for tag in self.tags.values():
-            if not tag.files:
-                continue
-            if tag.group not in display:
-                display[tag.group] = [tag]
-            else:
-                display[tag.group].append(tag)
-        for group in display.keys():
-            g_node = TreeViewLabel(text=self.groups[group].name, no_selection=True)
-            self.ids["db_tree"].add_node(g_node)
-            self.ids["db_tree"].toggle_node(g_node)
-            for tag in display[group]:
-                t_node = TreeViewLabel(text=tag.name, no_selection=True)
-                self.ids["db_tree"].add_node(t_node, parent=g_node)
-                self.ids["db_tree"].toggle_node(t_node)
-                for file in tag.files:
-                    f_node = FileNode(self.files[file], no_selection=False)
-                    self.ids["db_tree"].add_node(f_node, parent=t_node)
+        # Only add Groups and Tags of tagged files - avoid adding empty tags
+        for group in self.groups.values():
+            if group.has_files():
+                g_node = TreeViewLabel(text=group.name, no_selection=True)
+                self.ids["db_tree"].add_node(g_node)
+                self.ids["db_tree"].toggle_node(g_node)
+                for tag in group.tags.values():
+                    if tag.files:
+                        t_node = TreeViewLabel(text=tag.name, no_selection=True)
+                        self.ids["db_tree"].add_node(t_node, parent=g_node)
+                        self.ids["db_tree"].toggle_node(t_node)
+                        for file in tag.files:
+                            f_node = FileNode(self.files[file], no_selection=False)
+                            self.ids["db_tree"].add_node(f_node, parent=t_node)
 
     def add_system_file_to_db(self, *args):
         # with dir_select to False, this should always only pass in files
         # Execute on System File View, doubleclick on file
         if not len(args[0]):       # Doubleclick on folder will return empty list of args
             return
-        try:
-            file_id, file_hash = self.db.create_entry("file", [{'file_path': args[0][0]}])[0]  # Expect a list with 1 tuple
-        except IntegrityError as errmsg:
-            print(errmsg)
-            print("Cannot add this file to database")
+        new_file = File.new_file(args[0][0], self.db)
+        if not new_file:
+            print("Error")
             return
         # Update Model
-        self.files[file_id] = File(file_id, args[0][0], file_hash)
-        print("File Nav DB_files:", hex(id(self.files)))
-        print("File Nav DB:", hex(id(self.db)))
+        self.files[new_file.path] = new_file
         # Update View
         # Create new object for View -> since you have to be at System File View to execute this function, switching
         # back will automatically update the view
@@ -116,31 +107,22 @@ class FileNavigationPane(RelativeLayout):
     def remove_file_from_db(self, *args):
         if args[0] is None:
             return
-        try:
-            success = self.db.delete_entry("file", [{'file_id': args[0].db_object.db_id}])[0]
-        except IntegrityError as errmsg:
-            print("Cannot delete tagged file", errmsg)
-            return
-        if not success:
-            print("fail")
+        # args[0] is a Widget with reference to the underlying object
+        if not args[0].db_object.delete(self.db):
+            print("FileNav: error in deletion")
             return
         # Remove from Model
-        del self.files[args[0].db_object.db_id]
+        del self.files[args[0].db_object.path]
         # Remove from View
         self.ids["db_tree"].remove_node(args[0])        # TODO won't auto update folder view
 
     def set_active_file_object(self, selection):
         if type(selection) == FileNode:
-            self.active_selected_file = selection.db_object   # Pass db object itself
+            self.active_selected_file = selection.db_object.path
             return
         if selection == []:
             return
-        # Create 'anon' object on the fly with 'path' member
-        # This is a workaround. Ideally we could have a single object represent a file, regardless if it was in
-        # the database
-        # TODO just search if we have a matching path (although could break if files are moved) and pass the matching
-        #   object, otherwise, pass anon object.
-        self.active_selected_file = type('anon', (object,), {"path": selection[0], "tags": []})  # Pass 'anon' object
+        self.active_selected_file = selection[0]
 
 
 class FileNode(TreeViewNode, BoxLayout):
