@@ -14,13 +14,14 @@
         id: pane_name
         text: "File Navigator"
         size_hint: 1, 0.06
-        size_hint_max_y: 35
+        size_hint_max_y: 40
         pos_hint: {"top": 1}
     BoxLayout:                                                                  # View Options
         id: view_options_box
         size_hint: 1, 0.06
         size_hint_max_y: 40
-        pos_hint: {"top": 0.94} # {"top": pane_name.}
+        # pos_hint: {"top": 0.94}
+        y: pane_name.y - pane_name.height
         orientation: 'horizontal'
         ToggleButton:
             text: "System Files"
@@ -33,52 +34,59 @@
             on_press: view_manager.current = "database_files"
     ScreenManager:
         id: view_manager
+        size_hint: 1, None
+        height: root.height - view_options_box.height
+        top: view_options_box.y
         Screen:
             name: "system_files"
+            size_hint: 1, 0.95
+            pos_hint: {"top": 1}
             FileChooserListView:                                                # System Files View
                 id: system_files_view
-                size_hint: 1, 0.84
-                pos_hint: {"top": 0.85}
                 path: root.system_view_path                                          # default system view folder
                 on_submit: root.add_system_file_to_db(self.selection)                   # double click to add to db
                 on_selection: root.set_active_file_object(self.selection)               # single click to view
-
         Screen:                                                                 # Database Files View
             id: database_files_view
             name: "database_files"
-            size_hint: 1, 0.85
-            pos_hint: {"top": 0.85}
+            size_hint: 1, 1
+            pos_hint: {"top": 0.99}
             Button:
+                id: rmv_btn
                 text: "Remove file"                                                     # delete db file
-                size_hint: 0.4, 0.06
+                size_hint: 0.4, 0.08
+                size_hint_max_y: 40
                 pos_hint: {"top": 1, "right": 0.45}
                 on_press: root.remove_file_from_db(db_tree.selected_node)               # Delete "selected" node from db
             BoxLayout:
-                size_hint: 0.5, 0.06
+                id: sort_box
+                size_hint: 0.5, 0.08
+                size_hint_max_y: 40
                 pos_hint: {"top": 1, "right": 1}
                 orientation: 'horizontal'
                 Label:                                                          # Sorting Options
                     text: "Sort by : "
-                    size_hint: 0.4, 1
+                    size_hint: 0.28, 1
                 ToggleButton:
                     text: "Folders"
                     group: "sort_options"
                     allow_no_selection: False
-                    size_hint: 0.3, 1
+                    size_hint: 0.35, 1
                     on_press: root.sort_by_folder()
                 ToggleButton:
                     id: default_sort                                                    # default sort option
                     text: "Tags"
                     group: "sort_options"
                     allow_no_selection: False
-                    size_hint: 0.3, 1
+                    size_hint: 0.35, 1
                     on_press: root.sort_by_tags()
             ScrollView:
-                pos_hint: {"top": 0.92}
+                top: sort_box.y - 8
                 do_scroll_x: False
-                size_hint_y: 0.79
+                size_hint_y: None
+                height: database_files_view.height - sort_box.height - 60               # Not sure why this works
                 scroll_type: ["bars"]
-                DatabaseTree:                                                   # Tree Display
+                DatabaseTree:                                                           # Tree Display
                     id: db_tree
                     root_options: {"text": "Database Files", "no_selection": True}
                     size_hint: 1, None

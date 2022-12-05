@@ -1,20 +1,25 @@
 
 <FileDisplayPane>:
     Label:
+        id: pane_name
         text: "File Display"
         size_hint: 1, 0.06
-        size_hint_max_y: 35
+        size_hint_max_y: 40
         pos_hint: {"top": 1}
     Button:
+        id: save_btn
         text: "Save Changes"
         size_hint: 0.3, 0.06
         size_hint_max_y: 40
-        pos_hint: {"top": 0.94, 'right': 1}
+        size_hint_max_x: 200
+        y: pane_name.y - pane_name.height
+        pos_hint: {'right': 1}
         on_press: root.save_changes()
     BoxLayout:                                              # Image (file) display boundary box
+        id: display_box
         padding: [0, 0, 0, 0]
-        size_hint: 1, 0.6
-        pos_hint: {"top": 0.88}
+        size_hint: 1, 0.63
+        top: save_btn.y
         Image:
             id: file_display
             source: ""
@@ -27,7 +32,7 @@
     StackLayout:                                            # Active file's Tag display box
         id: tag_display
         size_hint: 1, 0.30
-        pos_hint: {"top": 0.28}
+        top: display_box.y
         padding: 8
         orientation: 'lr-tb'
         spacing: 5

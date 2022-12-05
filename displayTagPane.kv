@@ -32,14 +32,16 @@
 
 <TagPane>:
     Label:
+        id: pane_name
         text: "Tag Manager"
         size_hint: 1, 0.06
-        size_hint_max_y: 35
+        size_hint_max_y: 40
         pos_hint: {"top": 1}
     BoxLayout:                                      # Group Creation/Deletion Buttons
-        pos_hint: {"top": 0.94}
+        id: group_button_box
         size_hint: 1, 0.06
         size_hint_max_y: 40
+        y: pane_name.y - pane_name.height
         orientation: "horizontal"
         Button:
             text: "Add New Group"
@@ -48,9 +50,9 @@
             text: "Delete Group"
             on_press: root.delete_group()
     ScrollView:                                     # Main Tag display View
-        pos_hint: {"top": 0.85}
+        top: group_button_box.y
         do_scroll_x: False
-        size_hint_y: 0.79
+        size_hint_y: 0.95
         scroll_type: ["bars"]
         RecycleTree:
             id: tree_root
