@@ -95,5 +95,23 @@
 
 # Notify User of something
 <Notification>:
-
-
+    title: 'Notification'
+    size_hint: None, None
+    size: (450, 300)
+    overlay_color: 0, 0, 0, 0.2                             # Default is 0, 0, 0, 0.7
+    BoxLayout:
+        orientation: "vertical"
+        size_hint: 1, 1
+        Label:
+            id: info
+            text: ""
+            text_size: self.size            # Set text size same as Label size - wrapping behaviour
+            valign: "center"
+            padding_x: 8
+            italic: True
+        Button:
+            id: cancelBtn
+            size_hint_y: None
+            height: 40
+            text: "OK"
+            on_press: root.dismiss()

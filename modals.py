@@ -65,5 +65,5 @@ class Notification(Popup):
     def __init__(self, heading=None, info=None, **kwargs):
         super(Notification, self).__init__(**kwargs)
         self.title = heading if heading is not None else self.title
-        # = info if info is not None else ""
+        self.ids["info"].text = info if info is not None else ""
 
