@@ -1,13 +1,19 @@
-import sqlite3
-
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.relativelayout import RelativeLayout
-from kivy.properties import ObjectProperty, StringProperty, DictProperty, ListProperty, AliasProperty
-from kivy.uix.treeview import TreeView, TreeViewNode, TreeViewLabel
+from kivy.properties import ObjectProperty, StringProperty
+from kivy.uix.treeview import TreeView, TreeViewNode
 
-from modals import UserInputBox, SelectFromList
-from sqlite3 import IntegrityError
-from databaseObjects import TagGroup, Tag
+from modals import UserInputBox, SelectFromList, Notification
+from databaseObjects import TagGroup
+
+import logging
+tagpane_logger = logging.getLogger(__name__)
+tagpane_logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(fmt)
+tagpane_logger.addHandler(handler)
+tagpane_logger.propagate = False
 
 
 class TagPane(RelativeLayout):
@@ -19,20 +25,11 @@ class TagPane(RelativeLayout):
 
     def __init__(self, **kwargs):
         super(TagPane, self).__init__(**kwargs)
-        # print("TagPane init")
-        # print("TagPane db:", hex(id(self.db)))
-        # print("TagPane groups:", hex(id(self.groups)))
-        # print("TagPane tags:", hex(id(self.tags)))
 
     def on_kv_post(self, base_widget):
-        # print("TagPane on_kv_post")
-        # print("TagPane db:", hex(id(self.db)))
-        # print("TagPane groups:", hex(id(self.groups)))
-        # print("TagPane tags:", hex(id(self.tags)))
         pass
 
     def on_parent(self, *args):
-        # print("tagPane on_parent")
         pass
 
     def load_objects(self):
@@ -48,15 +45,21 @@ class TagPane(RelativeLayout):
                 tag_node = TagNode(db_object=child, on_double_press=self.add_tag_func)
                 self.ids["tree_root"].add_node(tag_node, parent=group_node)
             self.ids["tree_root"].toggle_node(group_node)      # Let default view be open nodes
+        tagpane_logger.info("GUI objects initialized..")
 
     # CRUD
     def add_group(self):
 
         def add(*args):
-            new_name = args[1]
-            new_group = TagGroup.new_group(self.db, new_name)
-            if new_group is None:
-                print("Error TagPane")
+            new_name = args[1][0]
+            success, new_group = TagGroup.new_group(self.db, new_name)
+            if not success:
+                message = "Unknown error"
+                if str(new_group) == "UNIQUE constraint failed: tag_groups.group_name":
+                    message = f"The Group name '{new_name}' already exists. Please choose another."
+                n = Notification(heading="Error", info=message)
+                n.open()
+                tagpane_logger.warning("Input error: " + message)
                 return
 
             # Update Model
@@ -64,10 +67,11 @@ class TagPane(RelativeLayout):
             # Update View
             group_node = GroupNode(db_object=new_group, add_tag_func=self.add_tag, del_tag_func=self.delete_tag)
             self.ids["tree_root"].add_node(group_node)
+            tagpane_logger.info("New GroupNode added to view")
 
         heading = "Add New Group"
-        info = "Group names must be unique and contain no special characters."
-        text_descript = ".. new Group name .."
+        info = "New Group name.\n\nGroup names must be unique."
+        text_descript = ".. new name .."
         d = UserInputBox(heading=heading, info=info, text_descript=text_descript, submit_call=add)
         d.open()
 
@@ -77,17 +81,23 @@ class TagPane(RelativeLayout):
     def delete_group(self):      # TODO prevent the deletion of a group if even one tag has links?
 
         def delete(*args):
-            group = self.groups[args[1]]
+            name = args[1][0]
+            group = self.groups[name]
             if not group.delete(self.db):
-                print("error deleting group")
+                tagpane_logger.warning("Error deleting group node")
+                message = "Cannot delete groups with tags. " \
+                          "First remove files from tags, then tags from groups, and try again."
+                n = Notification(heading="Error", info=message)
+                n.open()
                 return
             # Update Model
-            del self.groups[args[1]]
+            del self.groups[name]
             # Update View
             for node in self.ids["tree_root"].iterate_all_nodes():
-                if node.text == args[1]:
+                if node.text == name:
                     self.ids["tree_root"].remove_node(node)
                     break
+            tagpane_logger.info("Successfully deleted group node")
 
         heading = "Delete Group"
         list_heading = ""
@@ -100,18 +110,24 @@ class TagPane(RelativeLayout):
         # For use with the GroupNode button
 
         def add(*args):
-            print(*args)
-            new_tag = group_node.db_object.create_tag(self.db, args[1])
-            if not new_tag:
-                print("error crating new tag")
+            success, new_tag = group_node.db_object.create_tag(self.db, *args[1])
+            if not success:
+                message = "Unknown error"
+                if str(new_tag) == "UNIQUE constraint failed: tags.tag_name, tags.tag_group":
+                    message = f"The Tag name '{args[1]}' already exists within Group '{group_node.db_object.name}'. " \
+                              f"Please choose another."
+                n = Notification(heading="Error", info=message)
+                n.open()
+                tagpane_logger.warning("Error creating tag node: " + message)
                 return
             # Update Model
             self.tags[new_tag.db_id] = new_tag
             # Update View
             self.ids["tree_root"].add_node(TagNode(new_tag, on_double_press=self.add_tag_func), parent=group_node)
+            tagpane_logger.info("Successfully created tag node")
 
         heading = f"Create New Tag for Group {group_node.text}"
-        info = "Group names must be unique and contain no special characters."
+        info = "New Tag name\n\nTag names must be unique within their Group."
         text_descript = ".. new Tag name .."
         d = UserInputBox(heading=heading, info=info, text_descript=text_descript, submit_call=add)
         d.open()
@@ -126,15 +142,18 @@ class TagPane(RelativeLayout):
             return
         success = current_node.db_object.group.delete_tag(self.db, current_node.db_object)
         if not success:
-            print("error deleting tag")
+            tagpane_logger.warning("Error deleting tag node")
+            message = "Cannot delete tags linked to files. Unlink all files from this tag and try again."
+            n = Notification(heading="Error", info=message)
+            n.open()
             return
         # Update Model
         del self.tags[current_node.db_object.db_id]
         # Update View
         self.ids["tree_root"].remove_node(current_node)
+        tagpane_logger.info("Successfully deleted tag node")
 
 
-# TODO create custom group label class -> tiny buttons to add and remove tags
 class GroupNode(TreeViewNode, BoxLayout):
     text = StringProperty()
 
@@ -146,7 +165,6 @@ class GroupNode(TreeViewNode, BoxLayout):
         self.text = self.db_object.name
 
 
-# TODO create custom tag label class -> register double clicks
 class TagNode(TreeViewNode, BoxLayout):
     text = StringProperty()
 
@@ -180,10 +198,4 @@ class RecycleTree(TreeView):
     def clear_all_nodes(self):
         for node in [x for x in self.iterate_all_nodes()]:
             self.remove_node(node)
-
-    # def debug_node_size(self):
-    #     count = 0
-    #     for i in self.iterate_all_nodes():
-    #         count += 1
-    #     print("all nodes size", len(self.all_nodes))
-    #     print("Node tree size", count)
+        tagpane_logger.info("All nodes cleared..")

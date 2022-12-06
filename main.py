@@ -10,18 +10,25 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import DictProperty, ObjectProperty, StringProperty
 
-import logging
-logging.basicConfig(level=logging.DEBUG)
 from os import sep, getcwd
 from os.path import expanduser, isfile
 from sqlite3 import DatabaseError
 
 from elorydb import Database
-from databaseObjects import TagGroup, Tag, File
-from modals import SelectSystemObject, UserInputBox, Notification
+from databaseObjects import TagGroup, File
+from modals import SelectSystemObject, UserInputBox, Notification, UserInputWithOption
 from displayTagPane import TagPane
 from displayFileNavigator import FileNavigationPane
 from displayFilePane import FileDisplayPane
+
+import logging
+elory_logger = logging.getLogger("EloryApp")
+elory_logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(fmt)
+elory_logger.addHandler(handler)
+elory_logger.propagate = False
 
 
 class RootWidget(BoxLayout):
@@ -41,25 +48,14 @@ class RootWidget(BoxLayout):
         self.HOME_DIR = home_dir
         self.DATA_DIR = home_dir + sep + "Elory"
         self.APP_DIR = app_dir
-        print("RootWidget init")
-        # print("RootWidget db:", hex(id(self.db)))
-        # print("RootWidget files:", hex(id(self.files)))
-        # print("RootWidget groups:", hex(id(self.groups)))
-        # print("RootWidget tags:", hex(id(self.tags)))
         self.ids["file_nav"].change_system_view_path(self.HOME_DIR)
 
         # Create and load default Database if not exists
         if isfile(self.DATA_DIR + sep + "elory.edb"):            # TODO call load function if a current database exists
-            print("File exists")
+            elory_logger.info("Load default database...")
             self.load_database(self.DATA_DIR + sep + "elory.edb")
 
     def on_kv_post(self, base_widget):
-        print("RootWidget on_kv_post")
-        # print("RootWidget db:", hex(id(self.db)))
-        # print("RootWidget files:", hex(id(self.files)))
-        # print("RootWidget groups:", hex(id(self.groups)))
-        # print("RootWidget tags:", hex(id(self.tags)))
-
         pass
 
     def load_database(self, path):
@@ -74,6 +70,15 @@ class RootWidget(BoxLayout):
             self.ids["file_nav"].load_objects()
             n = Notification("Error opening database", info=str(emsg))
             n.open()
+            elory_logger.critical(f"Fail to load Database '{path}' - {emsg}")
+
+            # Possible endless loop:
+            elory_logger.warning(f"Attempting to revert to previous database...")
+            if self.current_db is not None:
+                elory_logger.info("Loading previous database...")
+                self.load_database(self.current_db)
+            else:
+                elory_logger.warning(f"Failed to revert to previous database...")
             return
         self.current_db = path                      # Success - set path
 
@@ -82,10 +87,11 @@ class RootWidget(BoxLayout):
 
         self.ids["tag_pane"].load_objects()
         self.ids["file_nav"].load_objects()
+        elory_logger.info("Environment load successful...")
 
     def open_db(self):
         def open_(*args):
-            self.load_database(args[1][0])
+            self.load_database(args[1][0][0])
 
         # Open modal view and select a db file
         d = SelectSystemObject(heading="Select Database", submit_call=open_, path=self.APP_DIR, dirselect=False)
@@ -94,20 +100,30 @@ class RootWidget(BoxLayout):
     def create_new_db(self):
 
         def create(*args):
-            new_name = args[1]
+            new_name, default_values = args[1]
+            if not new_name.isalnum():
+                message = "A database name may contain no special characters.\n\nPlease use names that contain " \
+                          "letters and numbers only."
+                n = Notification(heading="Database Name Error", info=message)
+                n.open()
+                elory_logger.warning(f"Failed database creation.. non-alphanumeric characters used")
+                return
+
+            default_values = True if default_values == "down" else False
             path = self.DATA_DIR + sep + new_name
-            new_db = self.db.create_new_db(path)
+            new_db = self.db.create_new_db(path, default_values)
+            elory_logger.info(f"Created new database '{new_name}' ...")
             self.load_database(new_db)
 
         info = "Choose new database name"
-        d = UserInputBox(heading="Create New Database", info=info, submit_call=create)
+        d = UserInputWithOption(heading="Create New Database", info=info, submit_call=create)
         d.open()
 
 
 class EloryApp(App):
 
     def build(self):
-        print("App build start..")
+        elory_logger.info("App build initialize...")
 
         # Dev variables
         home_dir = "/home/student/PycharmProjects/elory"
@@ -119,18 +135,18 @@ class EloryApp(App):
 
         root = RootWidget(home_dir, app_dir)
 
-        print("App build done..")
+        elory_logger.info("App build complete...")
         return root
 
     def on_start(self):
+        elory_logger.info("App start...")
         self.title = "Elory - The Elephant Memory Database"
-        pass
 
     def on_stop(self):
         # introspect App properties
         # print("App directory:", self.directory)
         # print("User Data directory eg. settings, prefs etc. :", self.user_data_dir)
-        pass
+        elory_logger.info("App closed...")
 
 
 if __name__ == "__main__":

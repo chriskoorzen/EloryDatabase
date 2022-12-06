@@ -1,63 +1,19 @@
-from kivy.properties import StringProperty, ObjectProperty
+from kivy.properties import ListProperty
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.filechooser import FileChooserIconView
 from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.treeview import TreeViewLabel
+from kivy.factory import Factory
 
-
-class DialogBox(Popup):     # Super class?
-
-    def __init__(self, **kwargs):
-        super(DialogBox, self).__init__(**kwargs)
-
-
-class UserInputBox(Popup):
-    user_input = StringProperty()
-
-    def __init__(self, heading=None, info=None, text_descript=None, submit_call=None, validate_call=None, **kwargs):
-        super(UserInputBox, self).__init__(**kwargs)
-
-        self.title = heading if heading is not None else self.title
-        self.ids["info"].text = info if info is not None else ""
-        # self.ids["info"].pos_hint = {"top": 1 - self.ids["user_input"].pos_hint["top"]}
-        self.ids["user_input"].hint_text = text_descript if text_descript is not None else ""
-
-        if submit_call is not None:
-            self.bind(user_input=submit_call)
-        if validate_call is not None:
-            self.ids["user_input"].bind(on_text_validate=validate_call)
-
-    def get_user_input(self, *args):
-        self.user_input = self.ids["user_input"].text
-
-
-class SelectFromList(Popup):
-    user_input = StringProperty()
-
-    def __init__(self, heading=None, submit_call=None, list_heading=None, item_list=[], **kwargs):
-        super(SelectFromList, self).__init__(**kwargs)
-        self.title = heading if heading is not None else self.title
-        self.ids["list_tree"].root_options = {"text": list_heading if list_heading is not None else self.title,
-                                              "no_selection": True}
-        for name in item_list:
-            self.ids["list_tree"].add_node(TreeViewLabel(text=name))
-
-        if submit_call is not None:
-            self.bind(user_input=submit_call)
-
-    def get_user_input(self, *args):
-        self.user_input = self.ids["list_tree"].selected_node.text
-
-
-class SelectSystemObject(Popup):
-    selected_path = ObjectProperty()
-
-    def __init__(self, heading=None, submit_call=None, path=None, dirselect=True, **kwargs):
-        super(SelectSystemObject, self).__init__(**kwargs)
-        self.title = heading if heading is not None else self.title
-        self.ids["chooser"].path = path
-        self.ids["chooser"].dirselect = dirselect
-
-        if submit_call is not None:
-            self.bind(selected_path=submit_call)
+import logging
+modal_logger = logging.getLogger(__name__)
+modal_logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(fmt)
+modal_logger.addHandler(handler)
+modal_logger.propagate = False
 
 
 class Notification(Popup):
@@ -67,3 +23,105 @@ class Notification(Popup):
         self.title = heading if heading is not None else self.title
         self.ids["info"].text = info if info is not None else ""
 
+    def on_open(self):
+        modal_logger.info(f"Launched Popup window '{self.__class__}' {self.title}")
+        super(Notification, self).on_open()
+
+
+class UserInputBase(Popup):      # Base class for UserInput Modals
+    user_input = ListProperty()
+
+    def __init__(self, heading=None, submit_call=None, **kwargs):
+        # Replace "Placeholder" Widget with intended template
+        Factory.unregister("Placeholder")
+        Factory.register("Placeholder", cls=self.placeholder)
+        super(UserInputBase, self).__init__(**kwargs)
+
+        self.title = heading if heading is not None else self.title
+
+        if submit_call is not None:
+            self.bind(user_input=submit_call)
+
+    def get_user_input(self, *args):
+        pass
+    
+    def on_open(self):
+        modal_logger.info(f"Launched Popup window '{self.__class__}' {self.title}")
+        super(UserInputBase, self).on_open()
+
+
+class TextAndInfo(BoxLayout):
+    pass
+
+
+class TextInfoAndOption(TextAndInfo):
+    pass
+
+
+class UserInputBox(UserInputBase):
+    placeholder = TextAndInfo
+
+    def __init__(self, info=None, text_descript=None, **kwargs):
+        super(UserInputBox, self).__init__(**kwargs)
+        self.ids["placeholder"].ids["info"].text = info if info is not None else ""
+        self.ids["placeholder"].ids["user_input"].hint_text = text_descript if text_descript is not None else ""
+
+    def get_user_input(self, *args):
+        if self.ids["placeholder"].ids["user_input"].text == "":    # Don't process empty strings
+            return True
+        self.user_input = [self.ids["placeholder"].ids["user_input"].text]
+        self.dismiss()
+
+
+class UserInputWithOption(UserInputBox):
+    placeholder = TextInfoAndOption
+
+    def __init__(self, info=None, text_descript=None, **kwargs):
+        super(UserInputWithOption, self).__init__(**kwargs)
+        self.ids["placeholder"].ids["info"].text = info if info is not None else ""
+        self.ids["placeholder"].ids["user_input"].hint_text = text_descript if text_descript is not None else ""
+
+    def get_user_input(self, *args):
+        if self.ids["placeholder"].ids["user_input"].text == "":    # Don't process empty strings
+            return True
+        self.user_input = [self.ids["placeholder"].ids["user_input"].text,
+                           self.ids["placeholder"].ids["check_option"].state]
+        self.dismiss()
+
+
+class OptionList(ScrollView):
+    pass
+
+
+class SelectFromList(UserInputBase):
+    placeholder = OptionList
+
+    def __init__(self, list_heading=None, item_list=[], **kwargs):
+        super(SelectFromList, self).__init__(size=(400, 350), **kwargs)
+        self.ids["placeholder"].ids["list_tree"].root_options = \
+            {"text": list_heading if list_heading is not None else self.title, "no_selection": True}
+        for name in item_list:
+            self.ids["placeholder"].ids["list_tree"].add_node(TreeViewLabel(text=name))
+
+    def get_user_input(self, *args):
+        if self.ids["placeholder"].ids["list_tree"].selected_node is None:
+            return True
+        self.user_input = [self.ids["placeholder"].ids["list_tree"].selected_node.text]
+        self.dismiss()
+
+
+class SelectSystemObject(UserInputBase):
+    placeholder = FileChooserIconView
+
+    def __init__(self, path=None, dirselect=True, **kwargs):
+        super(SelectSystemObject, self).__init__(size_hint=(0.5, 0.7), **kwargs)
+        self.ids["placeholder"].size_hint = (1, 0.8)
+        self.ids["placeholder"].pos_hint = {"top": 0.9}
+        self.ids["placeholder"].path = path
+        self.ids["placeholder"].dirselect = dirselect
+
+    def get_user_input(self, *args):
+        if self.ids["placeholder"].selection == []:
+            return True
+        self.user_input = [self.ids["placeholder"].selection]
+        self.dismiss()

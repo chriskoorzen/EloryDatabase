@@ -24,6 +24,7 @@
         y: pane_name.y - pane_name.height
         orientation: 'horizontal'
         ToggleButton:
+            id: other_view
             text: "System Files"
             group: "view_options"
             on_press: view_manager.current = "system_files"
@@ -68,6 +69,7 @@
                     text: "Sort by : "
                     size_hint: 0.28, 1
                 ToggleButton:
+                    id: other_sort
                     text: "Folders"
                     group: "sort_options"
                     allow_no_selection: False

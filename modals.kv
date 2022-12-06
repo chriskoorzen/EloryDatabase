@@ -1,97 +1,71 @@
 
-# Get text - User input
-<UserInputBox>:
+<UserInputBase>:
     title: 'Get User Input'
     size_hint: None, None
-    size: (300, 200)
+    size: (360, 240)
     overlay_color: 0, 0, 0, 0.2                             # Default is 0, 0, 0, 0.7
+    placeholder: placeholder
     BoxLayout:
         orientation: "vertical"
         size_hint: 1, 1
-        TextInput:
-            id: user_input
-            size_hint_max_y: 35
-            pos_hint: {"top": 1}
-            hint_text: ".. User input here .."
-            multiline: False
-            # on_text_validate: root.dismiss()                      # Specify a function to call
-        Label:
-            id: info
-            text: ""
-            text_size: self.size            # Set text size same as Label size - wrapping behaviour
-            valign: "center"
-            padding_x: 8
-            italic: True
+        Placeholder:
+            id: placeholder
         BoxLayout:
-            size_hint_max_y: 40
+            size_hint_max_y: 70
             orientation: "horizontal"
+            padding: 0, 30, 0, 0
             Button:
                 id: acceptBtn
                 text: "Submit"
                 on_press: root.get_user_input()                     # Specify a function to call
-                on_release: root.dismiss()
+                # on_release: root.dismiss()
             Button:
                 id: cancelBtn
                 text: "Cancel"
                 on_press: root.dismiss()
 
+<TextAndInfo>:
+    orientation: "vertical"
+    Label:
+        id: info
+        pos_hint: {"top": 1}
+        text: ""
+        text_size: self.size            # Set text size same as Label size - wrapping behaviour
+        valign: "center"
+        padding_x: 8
+        italic: True
+    TextInput:
+        id: user_input
+        # padding: 0, 0, 0, 30
+        size_hint_max_y: 35
+        pos_hint: {"top": 0.5}
+        hint_text: ".. User input here .."
+        multiline: False
+        # on_text_validate: root.dismiss()                      # Specify a function to call
 
-# Select option from custom list
-<SelectFromList>:
-    title: 'Select from List'
-    size_hint: None, None
-    size: (400, 350)
-    overlay_color: 0, 0, 0, 0.2                             # Default is 0, 0, 0, 0.7
+<TextInfoAndOption>:
+    # Extends TextAndInfo
     BoxLayout:
-        orientation: "vertical"
-        ScrollView:
-            do_scroll_x: False
-            scroll_type: ["bars"]
-            TreeView:
-                id: list_tree
-                # root_options: {"text": "Tag Groups", "no_selection": True}
-                size_hint: 1, None
-                height: self.minimum_height             # Auto update on height change to fit all children
-        BoxLayout:
-            size_hint_max_y: 40
-            orientation: "horizontal"
-            Button:
-                id: acceptBtn
-                text: "Submit"
-                on_press: root.get_user_input()
-                on_release: root.dismiss()
-            Button:
-                id: cancelBtn
-                text: "Cancel"
-                on_press: root.dismiss()
+        orientation: "horizontal"
+        Label:
+            size_hint: 0.7, 1
+            text: "Load Example values"
+            text_size: self.size
+            valign: "center"
+            padding_x: 8
+        CheckBox:
+            id: check_option
+            size_hint: 0.3, 1
+            state: "normal"
 
-
-# Select a file or folder from system
-<SelectSystemObject>:
-    title: "Select File/Folder"
-    size_hint: 0.5, 0.7
-    BoxLayout:
-        orientation: "vertical"
-        FileChooserIconView:
-            id: chooser
-            size_hint: 1, 0.8
-            pos_hint: {"top": 0.9}
-            # path: str(Path.home())                # Directory to open from
-            # dirselect: True                       # Can select directories
-        BoxLayout:
-            orientation: "horizontal"
-            size_hint_max_y: 40
-            Button:
-                id: acceptBtn
-                text: "Submit"
-                on_press: root.selected_path=chooser.selection
-                on_release: root.dismiss()
-            Button:
-                id: cancelBtn
-                text: "Cancel"
-                on_press: root.dismiss()
-
-
+<OptionList>
+    do_scroll_x: False
+    scroll_type: ["bars"]
+    TreeView:
+        id: list_tree
+        # root_options: {"text": "Tag Groups", "no_selection": True}
+        size_hint: 1, None
+        height: self.minimum_height             # Auto update on height change to fit all children
 
 # Notify User of something
 <Notification>:

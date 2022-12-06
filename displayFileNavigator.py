@@ -4,22 +4,23 @@ import os
 
 from kivy.properties import ObjectProperty, BooleanProperty, StringProperty, DictProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.filechooser import FileChooserListView, FileChooserIconView
-from kivy.uix.popup import Popup
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.screenmanager import NoTransition
-from kivy.uix.treeview import TreeView, TreeViewLabel, TreeViewNode
-from pathlib import Path
-
-from sqlite3 import IntegrityError
+from kivy.uix.treeview import TreeViewLabel, TreeViewNode
+from kivy.uix.behaviors.togglebutton import ToggleButtonBehavior
 
 from databaseObjects import File
 from displayTagPane import RecycleTree
+from modals import Notification
 
-
-# TODO Have consistency across database and system views in respect to tagged files -> a selected file on system view
-#   should still reflect its tags. (Will possibly have to tweak FileChooser classes -> just the FileListEntry template)
+import logging
+filenav_logger = logging.getLogger(__name__)
+filenav_logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(fmt)
+filenav_logger.addHandler(handler)
+filenav_logger.propagate = False
 
 
 class FileNavigationPane(RelativeLayout):
@@ -33,34 +34,37 @@ class FileNavigationPane(RelativeLayout):
 
     def __init__(self, **kwargs):
         super(FileNavigationPane, self).__init__(**kwargs)
-        # print("FileNavigationPane init")
-        # print("FileNavigationPane db:", hex(id(self.db)))
-        # print("FileNavigationPane files:", hex(id(self.files)))
-        # print("FileNavigationPane groups:", hex(id(self.groups)))
-        # print("FileNavigationPane tags:", hex(id(self.tags)))
 
     def load_objects(self):
         self.sort_by_tags()
+        # self.ids["default_view"].dispatch("on_press")     # FIXME if fail to open other db, this acts weird
         self.ids["default_view"].state = "down"
+        self.ids["other_view"].state = "normal"
+        # self.ids["default_sort"].dispatch("on_press")
         self.ids["default_sort"].state = "down"
+        self.ids["other_sort"].state = "normal"
+        filenav_logger.info("File objects initialized..")
 
     def on_kv_post(self, base_widget):
         self.ids["view_manager"].transition = NoTransition()
         self.ids["view_manager"].current = "database_files"
-        # print("FileNavigationPane on_kv_post")
-        # print("FileNavigationPane db:", hex(id(self.db)))
-        # print("FileNavigationPane files:", hex(id(self.files)))
-        # print("FileNavigationPane groups:", hex(id(self.groups)))
-        # print("FileNavigationPane tags:", hex(id(self.tags)))
+        filenav_logger.info("Set default view on 'database files'...")
 
     def change_system_view_path(self, new_path):
         self.system_view_path = new_path
 
+    def refresh_view(self):
+        t = ToggleButtonBehavior.get_widgets("sort_options")
+        for btn in t:
+            if btn.state == "down":
+                btn.dispatch("on_press")
+
     def sort_by_folder(self, *args):
         self.ids["db_tree"].clear_all_nodes()
-        self.ids["db_tree"].indent_level = 10
+        self.ids["db_tree"].indent_level = 18
         for file in self.files.values():
             self.ids["db_tree"].add_file_node(file.path, file)
+        filenav_logger.info("Sort by folders...")
 
     def sort_by_tags(self, *args):
         self.ids["db_tree"].clear_all_nodes()
@@ -78,43 +82,50 @@ class FileNavigationPane(RelativeLayout):
             if group.has_files():
                 g_node = TreeViewLabel(text=group.name, no_selection=True)
                 self.ids["db_tree"].add_node(g_node)
-                self.ids["db_tree"].toggle_node(g_node)
+                self.ids["db_tree"].toggle_node(g_node)                                 # Toggle Groups open
                 for tag in group.tags.values():
                     if tag.files:
                         t_node = TreeViewLabel(text=tag.name, no_selection=True)
                         self.ids["db_tree"].add_node(t_node, parent=g_node)
-                        self.ids["db_tree"].toggle_node(t_node)
+                        # self.ids["db_tree"].toggle_node(t_node)                         # Toggle Tags open
                         for file in tag.files:
                             f_node = FileNode(self.files[file], no_selection=False)
                             self.ids["db_tree"].add_node(f_node, parent=t_node)
+        filenav_logger.info("Sort by tags...")
 
     def add_system_file_to_db(self, *args):
         # with dir_select to False, this should always only pass in files
         # Execute on System File View, doubleclick on file
         if not len(args[0]):       # Doubleclick on folder will return empty list of args
             return
-        new_file = File.new_file(args[0][0], self.db)
-        if not new_file:
-            print("Error")
+        success, new_file = File.new_file(args[0][0], self.db)
+        if not success:
+            filenav_logger.warning(new_file)
+            n = Notification(heading="Error", info=str(new_file))
+            n.open()
             return
         # Update Model
         self.files[new_file.path] = new_file
         # Update View
-        # Create new object for View -> since you have to be at System File View to execute this function, switching
-        # back will automatically update the view
-        # TODO unless the "sort" is not refreshed, it wont display
+        self.refresh_view()
+        filenav_logger.info("New file node created")
 
     def remove_file_from_db(self, *args):
         if args[0] is None:
             return
         # args[0] is a Widget with reference to the underlying object
-        if not args[0].db_object.delete(self.db):
-            print("FileNav: error in deletion")
+        success = args[0].db_object.delete(self.db)
+        if not success[0]:
+            message = success[1]
+            n = Notification(heading="Error", info=message)
+            n.open()
+            filenav_logger.warning("Failed file node deletion")
             return
         # Remove from Model
         del self.files[args[0].db_object.path]
         # Remove from View
-        self.ids["db_tree"].remove_node(args[0])        # TODO won't auto update folder view
+        self.ids["db_tree"].remove_node(args[0])
+        filenav_logger.info("Successfully deleted file node")
 
     def set_active_file_object(self, selection):
         if type(selection) == FileNode:
@@ -143,6 +154,7 @@ class DatabaseTree(RecycleTree):
     def clear_all_nodes(self):
         super(DatabaseTree, self).clear_all_nodes()
         self.directory_layout.clear()
+        filenav_logger.info("Cleared all database nodes...")
 
     def add_file_node(self, file_path, file_obj):
         # A function that auto creates folder labels by from a given path
