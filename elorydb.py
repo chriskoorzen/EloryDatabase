@@ -1,12 +1,12 @@
-import logging
 import sqlite3
 import os.path
 import hashlib
 from pathlib import PurePath
 
+import logging
 db_logger = logging.getLogger(__name__)
 db_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(levelname)s] [%(name)s] [%(asctime)s] %(message)s")
+fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(fmt)
 db_logger.addHandler(handler)
@@ -84,10 +84,17 @@ class Database:
         self.CURS.executescript(table_template)
         db_logger.info(f"Initialized tables for database '{self.PATH}'")
         if default_values:
-            # TODO call create function with default values
+            groups = []
+            tags = []
+            for key in self._DEFAULT_VALUES.keys():
+                groups.append({"group_name": key})
+            group_ids = self.create_entry("group", groups)
+            groups = [[y for y in x.values()][0] for x in groups]       # FIXME a consequence of the unintuitive DB API
+            for g in zip(groups, group_ids):
+                for tag in self._DEFAULT_VALUES[g[0]]:
+                    tags.append({'tag_name': tag, 'group': g[1][1]})
+            self.create_entry("tag", tags)
             db_logger.info(f"Initialized default values for database '{self.PATH}'")
-            print(NotImplemented)
-            pass
 
     def _disconnect(self):
         if self.CONN is not None:
@@ -120,13 +127,6 @@ class Database:
                 return False
         db_logger.info(f"Table formats OK in database '{self.PATH}'")
         return True  # All checks passed
-
-    # TODO do not let database accept empty or funny strings. Sanitize for sql injection
-    #   App will crash on " ' " (single-quote, perhaps double quoted?) in text
-    def _sanitize_names(name):
-        if name == '' or name == ' ':
-            errmsg = "Name cannot be empty or special characters. Alpha-Numeric only"
-            raise sqlite3.IntegrityError(errmsg)
 
     @staticmethod
     def digest(file):
@@ -260,6 +260,7 @@ class Database:
             }
         returns a list (in order) of newly created items id's or True -> if an entry failed, None (or False?) instead
         """
+        # Relying on the cur.execute (?) replacement method for input sanitization
 
         if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
             errmsg = f"Item '{item}' is not a valid database object"
@@ -311,9 +312,8 @@ class Database:
         if item == "tag":
             newly_created_tags = []
             for new_tag in values:  # Iterate over list of dicts
-                group = new_tag['group']
+                # group = new_tag['group']
                 # if type(group) != int:                # TODO support group names as txt in future
-                # TODO santitize new_tag['tag_name']
                 try:
                     self.CURS.execute("INSERT INTO tags (tag_name, tag_group) VALUES (?, ?)",
                                       (new_tag['tag_name'], new_tag['group']))
@@ -556,11 +556,11 @@ class Database:
                     self.CURS.execute(f"DELETE FROM files WHERE file_id='{rem_file['file_id']}'")
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    success_resp.append(False)
+                    success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
                 db_logger.info(f"Removed file '{rem_file['file_id']}' from database")
-                success_resp.append(True)
+                success_resp.append((True, ))
             return success_resp
 
         if item == "group":
@@ -570,11 +570,11 @@ class Database:
                     self.CURS.execute(f"DELETE FROM tag_groups WHERE group_id='{rem_group['group_id']}'")
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    success_resp.append(False)
+                    success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
                 db_logger.info(f"Group '{rem_group['group_id']}' removed from database")
-                success_resp.append(True)
+                success_resp.append((True, ))
             return success_resp
 
         if item == "tag":
@@ -585,11 +585,11 @@ class Database:
                     self.CURS.execute(f"DELETE FROM tags WHERE tag_id='{rem_tag['tag_id']}'")
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    success_resp.append(False)
+                    success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
                 db_logger.info(f"Tag '{rem_tag['tag_id']}' removed from database")
-                success_resp.append(True)
+                success_resp.append((True, ))
             return success_resp
 
         if item == "tag-file":
@@ -600,11 +600,11 @@ class Database:
                         f"DELETE FROM tagged_files_m2m WHERE tag='{unlink['tag_id']}' AND file='{unlink['file_id']}'")
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    success_resp.append(False)
+                    success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
                 db_logger.info(f"Untagged file '{unlink['file_id']}' from tag '{unlink['tag_id']}'")
-                success_resp.append(True)
+                success_resp.append((True, ))
             return success_resp
 
     # Files

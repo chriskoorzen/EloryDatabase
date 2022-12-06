@@ -1,7 +1,4 @@
-"""
-Represent objects from database. No CRUD operations affecting the database may take place within these classes
-"""
-from os.path import basename, isfile
+from os.path import basename
 from operator import itemgetter
 
 import logging
@@ -156,8 +153,11 @@ class File(DatabaseObject):
                 return False, f"The file at '{path}' exists but is not recognized. " \
                               f"Have you edited this file or renamed a different file to this name " \
                               f"since last adding it to the database?"
-            path = check[0][1]
-            return False, f"This file is a duplicate of '{path}' that has already been added to the database."
+            db_path = check[0][1]
+            if db_path == path:
+                return False, "This file already exists in the database."
+            return False, f"This file is a duplicate of \n\n '{db_path}' \n\n " \
+                          f"that has already been added to the database."
         object_logger.info(f"New File object '{file[0]}' created")
         return True, cls(file[0], path, file[1])
 
@@ -165,9 +165,12 @@ class File(DatabaseObject):
         success = database.delete_entry("file", [{'file_id': self.db_id}])[0]       # Expect a return value?
         if not success[0]:
             object_logger.warning("File object deletion failed: " + str(success[1]))
-            return False
+            err_msg = "Unknown error"
+            if str(success[1]) == "FOREIGN KEY constraint failed":
+                err_msg = "This file still has tags linked to it. Please unlink all tags and try again."
+            return False, err_msg
         object_logger.info(f"Deleted File object '{self.db_id}'")
-        return True
+        return True,
 
     def add_tags(self, database, *tags):
         result = []
