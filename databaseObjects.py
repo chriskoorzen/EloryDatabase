@@ -6,8 +6,6 @@ from sqlite3 import IntegrityError
 import logging
 from operator import itemgetter
 
-from elorydb import Database
-
 
 class DatabaseObject:
     """Abstract class for objects retrieved from database"""
@@ -48,6 +46,7 @@ class TagGroup(DatabaseObject):
                 tags[t[0]] = new_t
         return groups, tags
 
+    # TODO this can be optimized with a memoization-like technique
     def has_files(self):
         for tag in self.tags.values():
             if tag.files:
@@ -56,12 +55,12 @@ class TagGroup(DatabaseObject):
 
     @classmethod
     def new_group(cls, database, name):
-        try:
-            group_id = database.create_entry("group", [{"group_name": name}])[0]
-        except IntegrityError as e:
-            print(e)
-            return
-        return cls(group_id, name)
+        # Only sending one entry, so only expect a single return tuple
+        group_id = database.create_entry("group", [{"group_name": name}])[0]
+        if not group_id[0]:
+            print("This group creation failed", group_id[1])
+            return group_id
+        return True, cls(group_id[1], name)
 
     def delete(self, database):
         try:
@@ -75,14 +74,14 @@ class TagGroup(DatabaseObject):
         return True
 
     def create_tag(self, database, tag_name):
-        try:
-            tag_id = database.create_entry("tag", [{'tag_name': tag_name, 'group': self.db_id}])[0]
-        except IntegrityError as e:
-            print(e)
-            return False
-        new_tag = Tag(tag_id, tag_name, self)
-        self.tags[tag_id] = new_tag
-        return new_tag
+        # Only sending one entry, so only expect a single return tuple
+        tag_id = database.create_entry("tag", [{'tag_name': tag_name, 'group': self.db_id}])[0]
+        if not tag_id[0]:
+            print("Error creating tag", tag_id[1])
+            return tag_id
+        new_tag = Tag(tag_id[1], tag_name, self)
+        self.tags[tag_id[1]] = new_tag
+        return True, new_tag
 
     def delete_tag(self, database, tag):
         if tag.db_id not in self.tags:
@@ -141,13 +140,19 @@ class File(DatabaseObject):
 
     @classmethod
     def new_file(cls, path, database):
-        try:
-            file_id, file_hash = database.create_entry("file", [{'file_path': path}])[0]  # Expect a list with 1 tuple
-        except IntegrityError as errmsg:
-            print(errmsg)
+        file = database.create_entry("file", [{'file_path': path}])[0]  # Expect a list with 1 tuple
+        if not file[0]:
             print("Cannot add this file to database")
-            return False
-        return cls(file_id, path, file_hash)
+            # Check why:
+            file_hash = file[2]
+            check = database.read_entry([("files", "file_hash_name", file_hash)])[0]
+            if not len(check):  # This empty
+                return False, f"The file at '{path}' exists but is not recognized. " \
+                              f"Have you edited this file or renamed a different file to this name " \
+                              f"since last adding it to the database?"
+            path = check[0][1]
+            return False, f"This file is a duplicate of '{path}' that has already been added to the database."
+        return True, cls(file[0], path, file[1])
 
     def delete(self, database):
         try:
@@ -162,17 +167,16 @@ class File(DatabaseObject):
         return success
 
     def add_tags(self, database, *tags):
-        # TODO since this is a compound operation, some might fail and others succeed
-        try:
-            pairs = database.create_entry("tag-file", [{'file_id': self.db_id, 'tag_id': tag.db_id} for tag in tags])
-        except IntegrityError as errmsg:
-            print(errmsg)
-            return False
-        for tag in range(len(tags)):
-            if not pairs[tag]:      # None indicate failure
-                self.tags[tags[tag].db_id] = tags[tag]
-                tags[tag].files[self.path] = self
-        return True
+        result = []
+        pairs = database.create_entry("tag-file", [{'file_id': self.db_id, 'tag_id': tag.db_id} for tag in tags])
+        for i in range(len(tags)):
+            if pairs[i][0]:
+                self.tags[tags[i].db_id] = tags[i]
+                tags[i].files[self.path] = self
+                result.append((True, pairs[i][0]))
+                continue
+            result.append(pairs[i])     # (False, errmsg)
+        return result
 
     def remove_tags(self, database, *tags):
         # TODO since this is a compound operation, some might fail and others succeed

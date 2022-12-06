@@ -4,10 +4,9 @@ import os.path
 import hashlib
 from pathlib import PurePath
 
-# TODO decide on error policy and propagation
 db_logger = logging.getLogger(__name__)
 db_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(levelname)s] [%(name)s] %(message)s")
+fmt = logging.Formatter("[%(levelname)s] [%(name)s] [%(asctime)s] %(message)s")
 handler = logging.StreamHandler()
 handler.setFormatter(fmt)
 db_logger.addHandler(handler)
@@ -47,9 +46,9 @@ class Database:
         "Places": ["New York", "Livingstone Beach", "Frontier National Park", "Modena Vacation Home"],
         "Pets": ["Leah -Dog", "Luna -Cat", "Jack -Bird"]
     }
+    _FILE_IDENTIFIER = ".edb"  # elory database
 
     DATA_DIR = ''
-    FILE_IDENTIFIER = ".edb"  # elory database
     CONN = None
     CURS = None
 
@@ -66,10 +65,10 @@ class Database:
         if proposed.is_absolute():  # Not a relative path name
             if os.path.exists(os.path.dirname(path)):  # The directory actually exists
                 # TODO strip any "." suffixes
-                return path + self.FILE_IDENTIFIER
+                return path + self._FILE_IDENTIFIER
             raise sqlite3.DatabaseError  # Absolute path by semantics, but parent dir does not exist
         # else, take relative name and append to specified data directory
-        path = self.DATA_DIR + os.sep + path + self.FILE_IDENTIFIER  # Take
+        path = self.DATA_DIR + os.sep + path + self._FILE_IDENTIFIER  # Take
         return path
 
     def _build_tables(self, default_values=True):
@@ -137,6 +136,13 @@ class Database:
         The goal is to identify a particular file (defined as a series of bits) regardless of the OS, underlying fs,
         or system architecture.
         """
+        # Hash times
+        # 19  MB ~ 0.04 sec
+        # 200 MB ~ 0.31 sec
+        # 400 MB ~ 0.61 sec
+        # 600 MB ~ 0.9 sec
+        # 900 MB ~ 1.35 sec
+        # 4.3 GB ~ 6.3 sec      # TODO will very much have to make this an async function
         if not os.path.isfile(file):
             db_logger.warning(f"{file} is not a valid file")
             return False
@@ -231,7 +237,9 @@ class Database:
         self.CONN.commit()
         db_logger.info(f"Extension of database '{self.PATH}' successful and ready for operation")
 
-    # CRUD operations   -> TODO could probably modify to take any kind and number of valid items and do batch ops
+    # CRUD operations
+    # TODO could probably modify to take any kind and number of valid items and do batch ops
+    #   because ideally we'd like to minimize disk writes and reads.
     def create_entry(self, item, values: list):
         """
         item -> specify the type of entry to make.      options: "file", "group", "tag"
@@ -266,14 +274,18 @@ class Database:
             for new_file in values:  # Iterate over list of dicts
                 unique_hash = self.digest(new_file['file_path'])  # return false if not valid path. else hash
                 if not unique_hash:
-                    newly_created_files.append(None)
+                    newly_created_files.append((False, f"{new_file['file_path']} is not a valid file."))
                     continue
                 try:
-                    self.CURS.execute(
-                        f"INSERT INTO files (file_path, file_hash_name) VALUES ('{os.path.abspath(new_file['file_path'])}', '{unique_hash}')")
+                    self.CURS.execute("INSERT INTO files (file_path, file_hash_name) VALUES (?, ?)",
+                                      (os.path.abspath(new_file['file_path']), unique_hash))
                 except sqlite3.IntegrityError as errmsg:
+                    # sqlite3 is ambiguous about UNIQUE constraints - it doesn't seem to have a set order - sometimes
+                    # it'll return a file_path error, other times a file_hash error for a file that violates both, so
+                    # it's hard to know which constraint was actually violated in the case of a file that violates only
+                    # one. Some additional checking is required by the caller to verify.
                     db_logger.critical(errmsg)
-                    newly_created_files.append(None)
+                    newly_created_files.append((False, errmsg, unique_hash))
                     continue
                 self.CONN.commit()
                 newly_created_files.append((self.CURS.lastrowid, unique_hash))
@@ -285,13 +297,14 @@ class Database:
             for new_group in values:  # Iterate over list of dicts
                 # TODO santitize new_group['group_name']
                 try:
-                    self.CURS.execute(f"INSERT INTO tag_groups (group_name) VALUES ('{new_group['group_name']}')")
+                    self.CURS.execute("INSERT INTO tag_groups (group_name) VALUES (?)",
+                                      (new_group["group_name"], ))
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    newly_created_groups.append(None)
+                    newly_created_groups.append((False, errmsg))
                     continue
                 self.CONN.commit()
-                newly_created_groups.append(self.CURS.lastrowid)
+                newly_created_groups.append((True, self.CURS.lastrowid))
                 db_logger.info(f"New group '{new_group['group_name']}' added to database")
             return newly_created_groups
 
@@ -302,14 +315,14 @@ class Database:
                 # if type(group) != int:                # TODO support group names as txt in future
                 # TODO santitize new_tag['tag_name']
                 try:
-                    self.CURS.execute(
-                        f"INSERT INTO tags (tag_name, tag_group) VALUES ('{new_tag['tag_name']}', {new_tag['group']})")
+                    self.CURS.execute("INSERT INTO tags (tag_name, tag_group) VALUES (?, ?)",
+                                      (new_tag['tag_name'], new_tag['group']))
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    newly_created_tags.append(None)
+                    newly_created_tags.append((False, errmsg))
                     continue
                 self.CONN.commit()
-                newly_created_tags.append(self.CURS.lastrowid)
+                newly_created_tags.append((True, self.CURS.lastrowid))
                 db_logger.info(f"New tag '{new_tag['tag_name']}' added to database")
             return newly_created_tags
 
@@ -317,18 +330,18 @@ class Database:
             newly_linked_tag_files = []
             for link in values:
                 try:
-                    self.CURS.execute(
-                        f"INSERT INTO tagged_files_m2m (tag, file) VALUES ('{link['tag_id']}', '{link['file_id']}')")
+                    self.CURS.execute("INSERT INTO tagged_files_m2m (tag, file) VALUES (?, ?)",
+                                      (link['tag_id'], link['file_id']))
                 except sqlite3.IntegrityError as errmsg:
                     db_logger.critical(errmsg)
-                    newly_linked_tag_files.append(None)
+                    newly_linked_tag_files.append((False, errmsg))
                     continue
                 self.CONN.commit()
-                newly_linked_tag_files.append(self.CURS.lastrowid)
+                newly_linked_tag_files.append((link['tag_id'], link['file_id']))    # tuple of tag-file pairs
                 db_logger.info(f"Linked tag '{link['tag_id']}' to file '{link['file_id']}'")
             return newly_linked_tag_files
 
-    def read_entry(self, values: list = []):
+    def read_entry(self, values: list = []):    # FIXME this is a very messy operation - unreadable
         """
         values        = [ (entry_to_read, by_parameter, parameter_value  ), ... ]
         entry to read = specify the type      valid options: "files", "tag_groups", "tags"
@@ -376,16 +389,12 @@ class Database:
                         if entry[0] == "files":
                             self.CURS.execute(f"SELECT tag FROM tagged_files_m2m WHERE file='{item[0]}'")
                             ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
-                            pass
                         if entry[0] == "tags":
                             self.CURS.execute(f"SELECT file FROM tagged_files_m2m WHERE tag='{item[0]}'")
                             ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
-                            # ans.append((*item, self.CURS.fetchall()))
-                            pass
                         if entry[0] == "tag_groups":
                             self.CURS.execute(f"SELECT tag_id FROM tags WHERE tag_group='{item[0]}'")
                             ans.append((*item, [x[0] for x in self.CURS.fetchall()]))
-                            pass
                     results.append(ans)
 
                 elif entry[1] in valid_props:
@@ -530,7 +539,7 @@ class Database:
             "file" : {'file_id': int}
             "group" : {'group_id': int}
             "tag" : {'tag_id': int}
-        returns a list (in order) of newly created items id's -> if an entry failed, None instead
+        returns a list (in order) of "True" if deletion succeeded -> else "False"
         """
 
         if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
