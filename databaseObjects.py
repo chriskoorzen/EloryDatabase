@@ -3,12 +3,12 @@ from operator import itemgetter
 
 import logging
 object_logger = logging.getLogger(__name__)
-object_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-object_logger.addHandler(handler)
-object_logger.propagate = False
+# object_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# object_logger.addHandler(handler)
+# object_logger.propagate = False
 
 
 class DatabaseObject:
@@ -89,7 +89,7 @@ class TagGroup(DatabaseObject):
 
     def delete_tag(self, database, tag):
         if tag.db_id not in self.tags:
-            object_logger.critical(f"Tag '{tag.name}' does not belong to group '{self.name}' ")
+            object_logger.error(f"Tag '{tag.name}' does not belong to group '{self.name}' ")
             return False
         if tag.files:
             object_logger.warning("Cannot delete a tag with files")

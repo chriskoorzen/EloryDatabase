@@ -10,25 +10,44 @@ from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import DictProperty, ObjectProperty, StringProperty
 
+import sys
+from traceback import format_tb
 from os import sep, getcwd
 from os.path import expanduser, isfile
-from sqlite3 import DatabaseError
 
-from elorydb import Database
-from databaseObjects import TagGroup, File
-from modals import SelectSystemObject, UserInputBox, Notification, UserInputWithOption
-from displayTagPane import TagPane
-from displayFileNavigator import FileNavigationPane
-from displayFilePane import FileDisplayPane
+from elorydb import Database, db_logger, DatabaseError
+from databaseObjects import TagGroup, File, object_logger
+from modals import SelectSystemObject, Notification, UserInputWithOption
+from displayTagPane import TagPane, tagpane_logger
+from displayFileNavigator import FileNavigationPane, filenav_logger
+from displayFilePane import FileDisplayPane, display_logger
+
+_LOG_FILE = "elorylogs.txt"
 
 import logging
 elory_logger = logging.getLogger("EloryApp")
+db_logger.parent = elory_logger                 # There HAS to be a better way to do this?
+object_logger.parent = elory_logger
+filenav_logger.parent = elory_logger
+tagpane_logger.parent = elory_logger
+display_logger.parent = elory_logger
+
 elory_logger.setLevel(logging.DEBUG)
 fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
+# handler = logging.StreamHandler()
+handler = logging.FileHandler(_LOG_FILE)
 handler.setFormatter(fmt)
 elory_logger.addHandler(handler)
-elory_logger.propagate = False
+# elory_logger.propagate = False
+
+
+def log_uncaught_exception(e_type, e_value, e_traceback):
+    elory_logger.critical("System crash...")
+    elory_logger.critical(f"{e_type} {e_value}\n{''.join(format_tb(e_traceback))}")
+    sys.__excepthook__(e_type, e_value, e_traceback)
+
+
+sys.excepthook = log_uncaught_exception
 
 
 class RootWidget(BoxLayout):
@@ -53,7 +72,7 @@ class RootWidget(BoxLayout):
         # Create and load default Database if not exists
         if isfile(self.DATA_DIR + sep + "elory.edb"):            # TODO call load function if a current database exists
             elory_logger.info("Load default database...")
-            self.load_database(self.DATA_DIR + sep + "elory.edb")
+            self.load_database(self.DATA_DIR + sep + "elory.edbs")
 
     def on_kv_post(self, base_widget):
         pass
@@ -70,11 +89,11 @@ class RootWidget(BoxLayout):
             self.ids["file_nav"].load_objects()
             n = Notification("Error opening database", info=str(emsg))
             n.open()
-            elory_logger.critical(f"Fail to load Database '{path}' - {emsg}")
+            elory_logger.error(f"Fail to load Database '{path}' - {emsg}")
 
             # Possible endless loop:
             elory_logger.warning(f"Attempting to revert to previous database...")
-            if self.current_db is not None:
+            if not self.current_db == "":
                 elory_logger.info("Loading previous database...")
                 self.load_database(self.current_db)
             else:
@@ -136,6 +155,7 @@ class EloryApp(App):
         root = RootWidget(home_dir, app_dir)
 
         elory_logger.info("App build complete...")
+        # return root
         return root
 
     def on_start(self):

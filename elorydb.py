@@ -1,16 +1,16 @@
-import sqlite3
+from sqlite3 import DatabaseError, IntegrityError, connect
 import os.path
 import hashlib
 from pathlib import PurePath
 
 import logging
 db_logger = logging.getLogger(__name__)
-db_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-db_logger.addHandler(handler)
-db_logger.propagate = False
+# db_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# db_logger.addHandler(handler)
+# db_logger.propagate = False
 
 
 class Database:
@@ -66,7 +66,7 @@ class Database:
             if os.path.exists(os.path.dirname(path)):  # The directory actually exists
                 # TODO strip any "." suffixes
                 return path + self._FILE_IDENTIFIER
-            raise sqlite3.DatabaseError  # Absolute path by semantics, but parent dir does not exist
+            raise DatabaseError  # Absolute path by semantics, but parent dir does not exist
         # else, take relative name and append to specified data directory
         path = self.DATA_DIR + os.sep + path + self._FILE_IDENTIFIER  # Take
         return path
@@ -160,12 +160,12 @@ class Database:
         # TODO reject names with special characters
         if os.path.isfile(path):  # reject existing files
             # TODO or directories must also be rejected
-            db_logger.critical(f"File '{path}' already exists.")
-            raise sqlite3.DatabaseError
+            db_logger.error(f"File '{path}' already exists.")
+            raise DatabaseError
 
         self.PATH = self._prepare_path(path)  # Set path, and new file name
 
-        self.CONN = sqlite3.connect(self.PATH)  # Create (connect) new sqlite3 database
+        self.CONN = connect(self.PATH)  # Create (connect) new sqlite3 database
         self.CURS = self.CONN.cursor()
 
         self._build_tables(default_values)  # Build database
@@ -179,30 +179,30 @@ class Database:
     def connect_db(self, path):
 
         if not os.path.isfile(path):  # Reject non-files
-            db_logger.critical(f"File '{path}' does not exist.")
-            raise sqlite3.DatabaseError
+            db_logger.error(f"File '{path}' does not exist.")
+            raise DatabaseError
 
         self._disconnect()
         self.PATH = path
-        self.CONN = sqlite3.connect(self.PATH)  # Connect to existing file
+        self.CONN = connect(self.PATH)  # Connect to existing file
         self.CURS = self.CONN.cursor()
 
         # Check if file is valid sqlite3 database
-        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'sqlite3.DatabaseError' if invalid file
+        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'DatabaseError' if invalid file
         db_logger.info(f"Connecting to database '{self.PATH}' ...")
 
         # Is this db empty?
         if self.CURS.fetchone()[0] == 0:  # Database is valid but empty -> abort connection
             errmsg = f"Database '{self.PATH}' is empty. Abort connection."
-            db_logger.critical(errmsg)
+            db_logger.error(errmsg)
             self._disconnect()
-            raise sqlite3.DatabaseError(errmsg)
+            raise DatabaseError(errmsg)
 
         if not self._definition_exists():  # Does it have the necessary tables and columns?
             errmsg = f"Database '{self.PATH}' data format mismatch. Abort connection."
-            db_logger.critical(errmsg)
+            db_logger.error(errmsg)
             self._disconnect()
-            raise sqlite3.DatabaseError(errmsg)
+            raise DatabaseError(errmsg)
 
         # Necessary settings for database
         self.CURS.execute("PRAGMA foreign_keys = ON")  # Enforce Foreign Key constraints
@@ -212,23 +212,23 @@ class Database:
     def extend_db(self, path, default_values=True):
 
         if not os.path.isfile(path):  # Reject non-files
-            db_logger.critical(f"File '{path}' does not exist.")
-            raise sqlite3.DatabaseError
+            db_logger.error(f"File '{path}' does not exist.")
+            raise DatabaseError
 
         self._disconnect()
         self.PATH = path
-        self.CONN = sqlite3.connect(self.PATH)  # Connect to existing file
+        self.CONN = connect(self.PATH)  # Connect to existing file
         self.CURS = self.CONN.cursor()
 
         # Check if file is valid sqlite3 database
-        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'sqlite3.DatabaseError' if invalid file
+        self.CURS.execute("PRAGMA schema_version")  # Will fail with 'DatabaseError' if invalid file
         db_logger.info(f"Connected to database '{self.PATH}' ...")
 
         if self._definition_exists():
             errmsg = f"Database '{self.PATH}' data format already exists. Abort extension."
-            db_logger.critical(errmsg)
+            db_logger.error(errmsg)
             self._disconnect()
-            raise sqlite3.DatabaseError(errmsg)
+            raise DatabaseError(errmsg)
 
         self._build_tables(default_values)
 
@@ -264,8 +264,8 @@ class Database:
 
         if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
             errmsg = f"Item '{item}' is not a valid database object"
-            db_logger.critical(errmsg)
-            raise sqlite3.IntegrityError(errmsg)
+            db_logger.error(errmsg)
+            raise IntegrityError(errmsg)
 
         # TODO unfortunately, cur.execute only stores the last rowid of a newly created item, so we will have to call
         #   the function iteratively. Perhaps create a custom sql func that can return the list of a batch transaction?
@@ -280,12 +280,12 @@ class Database:
                 try:
                     self.CURS.execute("INSERT INTO files (file_path, file_hash_name) VALUES (?, ?)",
                                       (os.path.abspath(new_file['file_path']), unique_hash))
-                except sqlite3.IntegrityError as errmsg:
+                except IntegrityError as errmsg:
                     # sqlite3 is ambiguous about UNIQUE constraints - it doesn't seem to have a set order - sometimes
                     # it'll return a file_path error, other times a file_hash error for a file that violates both, so
                     # it's hard to know which constraint was actually violated in the case of a file that violates only
                     # one. Some additional checking is required by the caller to verify.
-                    db_logger.critical(errmsg)
+                    db_logger.error(errmsg)
                     newly_created_files.append((False, errmsg, unique_hash))
                     continue
                 self.CONN.commit()
@@ -300,8 +300,8 @@ class Database:
                 try:
                     self.CURS.execute("INSERT INTO tag_groups (group_name) VALUES (?)",
                                       (new_group["group_name"], ))
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     newly_created_groups.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -317,8 +317,8 @@ class Database:
                 try:
                     self.CURS.execute("INSERT INTO tags (tag_name, tag_group) VALUES (?, ?)",
                                       (new_tag['tag_name'], new_tag['group']))
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     newly_created_tags.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -332,8 +332,8 @@ class Database:
                 try:
                     self.CURS.execute("INSERT INTO tagged_files_m2m (tag, file) VALUES (?, ?)",
                                       (link['tag_id'], link['file_id']))
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     newly_linked_tag_files.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -423,19 +423,19 @@ class Database:
                         results.append(None)
                 else:
                     errmsg = f"'{entry[1]}' is not a valid property of {entry[0]}"
-                    db_logger.critical(errmsg)
+                    db_logger.error(errmsg)
                     results.append(None)
             else:
                 errmsg = f"Item '{entry[0]}' is not a valid database object"
-                db_logger.critical(errmsg)
+                db_logger.error(errmsg)
                 results.append(None)
         return results
 
         # First implementation -> # TODO Refine the API to make sense across the CRUD ops
         # if item not in ["file", "group", "tag"]:  # self._DEFINITION.keys()
         #     errmsg = f"Item '{item}' is not a valid database object"
-        #     db_logger.critical(errmsg)
-        #     raise sqlite3.IntegrityError(errmsg)
+        #     db_logger.error(errmsg)
+        #     raise IntegrityError(errmsg)
         #
         # # TODO currently it is possible to specify items with different keywords, and have to iteratively loop over them
         # #   and return. Write a sql join (or similar concept) function that can process a batch at once.
@@ -449,14 +449,14 @@ class Database:
         #         # valid file properties = {'file_id', 'file_path', 'file_hash_name'}
         #         prop = req_file.keys() & {'file_id', 'file_path', 'file_hash_name'}
         #         if len(prop) == 0:
-        #             db_logger.critical(f"No valid file properties given: {req_file}")
+        #             db_logger.error(f"No valid file properties given: {req_file}")
         #             requested_files.append(None)
         #             continue
         #         col = prop.pop()
         #         try:
         #             self.CURS.execute(f"SELECT file_id, file_path, file_hash_name FROM files WHERE {col}='{req_file[col]}'")
         #         except Exception as e:          # Not too certain what all we may get here
-        #             db_logger.critical(f"Error '{e}' occurred during retrieval call for file object {req_file}")
+        #             db_logger.error(f"Error '{e}' occurred during retrieval call for file object {req_file}")
         #             requested_files.append(None)
         #             continue
         #         requested_files.extend(self.CURS.fetchall())        # return tuple objects for unique identifiers
@@ -471,14 +471,14 @@ class Database:
         #         # valid file properties = {'group_id', 'group_name'}
         #         prop = req_group.keys() & {'group_id', 'group_name'}
         #         if len(prop) == 0:
-        #             db_logger.critical(f"No valid group properties given: {req_group}")
+        #             db_logger.error(f"No valid group properties given: {req_group}")
         #             requested_groups.append(None)
         #             continue
         #         col = prop.pop()
         #         try:
         #             self.CURS.execute(f"SELECT group_id, group_name FROM tag_groups WHERE {col}='{req_group[col]}'")
         #         except Exception as e:          # Not too certain what all we may get here
-        #             db_logger.critical(f"Error '{e}' occurred during retrieval call for group object {req_group}")
+        #             db_logger.error(f"Error '{e}' occurred during retrieval call for group object {req_group}")
         #             requested_groups.append(None)
         #             continue
         #         requested_groups.extend(self.CURS.fetchall())
@@ -494,7 +494,7 @@ class Database:
         #             try:
         #                 self.CURS.execute(f"SELECT tag_id, tag_name, tag_group FROM tags WHERE tag_id='{req_tag['tag_id']}'")
         #             except Exception as e:  # Not too certain what all we may get here
-        #                 db_logger.critical(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
+        #                 db_logger.error(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
         #                 requested_tags.append(None)
         #                 continue
         #             requested_tags.extend(self.CURS.fetchall())
@@ -504,7 +504,7 @@ class Database:
         #                 self.CURS.execute(
         #                     f"SELECT tag_id, tag_name, tag_group FROM tags WHERE tag_name='{req_tag['tag_name']}' AND tag_group='{req_tag['tag_group']}'")
         #             except Exception as e:  # Not too certain what all we may get here
-        #                 db_logger.critical(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
+        #                 db_logger.error(f"Error '{e}' occurred during retrieval call for tag object {req_tag}")
         #                 requested_tags.append(None)
         #                 continue
         #             requested_tags.extend(self.CURS.fetchall())
@@ -516,8 +516,8 @@ class Database:
         #
         # if item not in ["file", "group", "tag"]:        # self._DEFINITION.keys()
         #     errmsg = f"Item '{item}' is not a valid database object"
-        #     db_logger.critical(errmsg)
-        #     raise sqlite3.IntegrityError(errmsg)
+        #     db_logger.error(errmsg)
+        #     raise IntegrityError(errmsg)
         #
         # if item == "file":
         #
@@ -544,8 +544,8 @@ class Database:
 
         if item not in ["file", "group", "tag", "tag-file"]:  # self._DEFINITION.keys()
             errmsg = f"Item '{item}' is not a valid database object"
-            db_logger.critical(errmsg)
-            raise sqlite3.IntegrityError(errmsg)
+            db_logger.error(errmsg)
+            raise IntegrityError(errmsg)
 
         if item == "file":
             # TODO Should be able to delete files even if tagged.
@@ -554,8 +554,8 @@ class Database:
                 try:
                     # This SQL should cascade auto
                     self.CURS.execute(f"DELETE FROM files WHERE file_id='{rem_file['file_id']}'")
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -568,8 +568,8 @@ class Database:
             for rem_group in values:  # dict - prop_identifier (always "id")
                 try:
                     self.CURS.execute(f"DELETE FROM tag_groups WHERE group_id='{rem_group['group_id']}'")
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -583,8 +583,8 @@ class Database:
             for rem_tag in values:  # dict - prop_identifier (always "id")
                 try:
                     self.CURS.execute(f"DELETE FROM tags WHERE tag_id='{rem_tag['tag_id']}'")
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()
@@ -598,8 +598,8 @@ class Database:
                 try:
                     self.CURS.execute(
                         f"DELETE FROM tagged_files_m2m WHERE tag='{unlink['tag_id']}' AND file='{unlink['file_id']}'")
-                except sqlite3.IntegrityError as errmsg:
-                    db_logger.critical(errmsg)
+                except IntegrityError as errmsg:
+                    db_logger.error(errmsg)
                     success_resp.append((False, errmsg))
                     continue
                 self.CONN.commit()

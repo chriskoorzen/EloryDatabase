@@ -8,12 +8,12 @@ from databaseObjects import TagGroup
 
 import logging
 tagpane_logger = logging.getLogger(__name__)
-tagpane_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-tagpane_logger.addHandler(handler)
-tagpane_logger.propagate = False
+# tagpane_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# tagpane_logger.addHandler(handler)
+# tagpane_logger.propagate = False
 
 
 class TagPane(RelativeLayout):

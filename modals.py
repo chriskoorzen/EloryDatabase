@@ -8,12 +8,12 @@ from kivy.factory import Factory
 
 import logging
 modal_logger = logging.getLogger(__name__)
-modal_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-modal_logger.addHandler(handler)
-modal_logger.propagate = False
+# modal_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# modal_logger.addHandler(handler)
+# modal_logger.propagate = False
 
 
 class Notification(Popup):

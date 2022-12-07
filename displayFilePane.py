@@ -7,12 +7,12 @@ from modals import Notification
 
 import logging
 display_logger = logging.getLogger(__name__)
-display_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-display_logger.addHandler(handler)
-display_logger.propagate = False
+# display_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# display_logger.addHandler(handler)
+# display_logger.propagate = False
 
 
 class FileDisplayPane(RelativeLayout):

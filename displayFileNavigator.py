@@ -1,8 +1,6 @@
-import pprint
-import gc
 import os
 
-from kivy.properties import ObjectProperty, BooleanProperty, StringProperty, DictProperty
+from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.relativelayout import RelativeLayout
 from kivy.uix.screenmanager import NoTransition
@@ -15,12 +13,12 @@ from modals import Notification
 
 import logging
 filenav_logger = logging.getLogger(__name__)
-filenav_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-handler = logging.StreamHandler()
-handler.setFormatter(fmt)
-filenav_logger.addHandler(handler)
-filenav_logger.propagate = False
+# filenav_logger.setLevel(logging.DEBUG)
+# fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+# handler = logging.StreamHandler()
+# handler.setFormatter(fmt)
+# filenav_logger.addHandler(handler)
+# filenav_logger.propagate = False
 
 
 class FileNavigationPane(RelativeLayout):
