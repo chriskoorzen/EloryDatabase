@@ -29,24 +29,24 @@ class FileDisplayPane(RelativeLayout):
     def __init__(self, **kwargs):
         super(FileDisplayPane, self).__init__(**kwargs)
         self.backup_images = {
-            "xls": "resources/excel.png",
-            "xlsx": "resources/excel.png",
-            "doc": "resources/word.png",
-            "docx": "resources/word.png",
-            "ppt": "resources/powerpoint.png",
-            "pptx": "resources/powerpoint.png",
-            "pdf": "resources/pdf.png",
-            "mp3": "resources/mp3.png",
-            "mp4": "resources/mp4.png",
-            "avi": "resources/avi.png",
-            "raw": "resources/raw.png",
-            "py": "resources/py.png",
-            "css": "resources/css.png",
-            "html": "resources/html.png",
-            "js": "resources/js.png",
-            "ps": "resources/photoshop.png",
-            "ai": "resources/ai.png",
-            "xml": "resources/xml.png",
+            "xls": "resources/images/excel.png",
+            "xlsx": "resources/images/excel.png",
+            "doc": "resources/images/word.png",
+            "docx": "resources/images/word.png",
+            "ppt": "resources/images/powerpoint.png",
+            "pptx": "resources/images/powerpoint.png",
+            "pdf": "resources/images/pdf.png",
+            "mp3": "resources/images/mp3.png",
+            "mp4": "resources/images/mp4.png",
+            "avi": "resources/images/avi.png",
+            "raw": "resources/images/raw.png",
+            "py": "resources/images/py.png",
+            "css": "resources/images/css.png",
+            "html": "resources/images/html.png",
+            "js": "resources/images/js.png",
+            "ps": "resources/images/photoshop.png",
+            "ai": "resources/images/ai.png",
+            "xml": "resources/images/xml.png",
         }
 
     def on_kv_post(self, base_widget):
@@ -58,12 +58,12 @@ class FileDisplayPane(RelativeLayout):
         if not self.ids["file_display"]._coreimage:     # No convenient exposed property to see if image failed to load
             split = self.active_file.split(".")
             if len(split) == 1:
-                self.ids["file_display"].source = "resources/No-Image-Placeholder.svg.png"
+                self.ids["file_display"].source = "resources/images/No-Image-Placeholder.svg.png"
                 display_logger.info(f"No default img selected for file without extension.")
             else:
                 ext = split[-1]
                 if ext not in self.backup_images:
-                    self.ids["file_display"].source = "resources/No-Image-Placeholder.svg.png"
+                    self.ids["file_display"].source = "resources/images/No-Image-Placeholder.svg.png"
                     display_logger.info(f"No default img found for '{ext}' file")
                 else:
                     self.ids["file_display"].source = self.backup_images[ext]

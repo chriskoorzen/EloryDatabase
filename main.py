@@ -9,6 +9,7 @@ kivy_require("2.1.0")
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import DictProperty, ObjectProperty, StringProperty
+from kivy.uix.settings import SettingsWithSidebar
 
 import sys
 from traceback import format_tb
@@ -22,7 +23,7 @@ from displayTagPane import TagPane, tagpane_logger
 from displayFileNavigator import FileNavigationPane, filenav_logger
 from displayFilePane import FileDisplayPane, display_logger
 
-_LOG_FILE = "elorylogs.txt"
+_LOG_FILE = "newlogs.txt"
 
 import logging
 elory_logger = logging.getLogger("EloryApp")
@@ -31,14 +32,6 @@ object_logger.parent = elory_logger
 filenav_logger.parent = elory_logger
 tagpane_logger.parent = elory_logger
 display_logger.parent = elory_logger
-
-elory_logger.setLevel(logging.DEBUG)
-fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-# handler = logging.StreamHandler()
-handler = logging.FileHandler(_LOG_FILE)
-handler.setFormatter(fmt)
-elory_logger.addHandler(handler)
-# elory_logger.propagate = False
 
 
 def log_uncaught_exception(e_type, e_value, e_traceback):
@@ -72,7 +65,7 @@ class RootWidget(BoxLayout):
         # Create and load default Database if not exists
         if isfile(self.DATA_DIR + sep + "elory.edb"):            # TODO call load function if a current database exists
             elory_logger.info("Load default database...")
-            self.load_database(self.DATA_DIR + sep + "elory.edbs")
+            self.load_database(self.DATA_DIR + sep + "elory.edb")
 
     def on_kv_post(self, base_widget):
         pass
@@ -143,6 +136,8 @@ class EloryApp(App):
 
     def build(self):
         elory_logger.info("App build initialize...")
+        self.use_kivy_settings = False
+        self.settings_cls = SettingsWithSidebar
 
         # Dev variables
         home_dir = "/home/student/PycharmProjects/elory"
@@ -165,9 +160,44 @@ class EloryApp(App):
     def on_stop(self):
         # introspect App properties
         # print("App directory:", self.directory)
-        # print("User Data directory eg. settings, prefs etc. :", self.user_data_dir)
+        # print("User Data directory eg. settings.json, prefs etc. :", self.user_data_dir)
         elory_logger.info("App closed...")
+
+    def build_config(self, config):
+        # Define config defaults
+        # Read current defined configs
+        # Create if not yet created
+        # Fallback to logical defaults if values fail
+        # Otherwise set to defined values
+        elory_logger.info("Load config...")
+        config.setdefaults(
+            "Basic Settings", {
+                "default_systemview_path": "/home/student/PycharmProjects/elory",
+                "default_database_path": "Elory/elory.edb",
+                "default_sort_options": "Tag"
+                #
+            }
+        )
+
+    def build_settings(self, settings):
+        # Define config GUI layout
+        settings.add_json_panel("Basic Settings",
+                                config=self.config,
+                                filename="resources/settings.json")
+
+    def on_config_change(self, config, section, key, value):
+        # Respond to changes in config settings
+        elory_logger.info("Config updated...")
+        print(config, section, key, value)
+        pass
 
 
 if __name__ == "__main__":
+    elory_logger.setLevel(logging.DEBUG)
+    fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+    handler = logging.StreamHandler()
+    # handler = logging.FileHandler(_LOG_FILE)
+    handler.setFormatter(fmt)
+    elory_logger.addHandler(handler)
+    # elory_logger.propagate = False
     EloryApp().run()
