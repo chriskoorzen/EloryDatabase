@@ -157,6 +157,7 @@ class Database:
 
     # Database management
     def create_new_db(self, path, default_values=True):
+        db_logger.info(f"Creating new database '{path}'...")
         # TODO reject names with special characters
         if os.path.isfile(path):  # reject existing files
             # TODO or directories must also be rejected
