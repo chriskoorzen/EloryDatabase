@@ -28,28 +28,37 @@ class FileNavigationPane(RelativeLayout):
     tags = ObjectProperty()
 
     active_selected_file = ObjectProperty()
+
     system_view_path = StringProperty()
+    default_sort = StringProperty()
+    default_view = StringProperty()
 
     def __init__(self, **kwargs):
         super(FileNavigationPane, self).__init__(**kwargs)
 
     def load_objects(self):
-        self.sort_by_tags()
-        # self.ids["default_view"].dispatch("on_press")     # FIXME if fail to open other db, this acts weird
-        self.ids["default_view"].state = "down"
-        self.ids["other_view"].state = "normal"
-        # self.ids["default_sort"].dispatch("on_press")
-        self.ids["default_sort"].state = "down"
-        self.ids["other_sort"].state = "normal"
+        if self.default_sort == "Folder":
+            self.ids["folder_sort"].state = "down"
+            self.ids["tag_sort"].state = "normal"
+            self.ids["folder_sort"].dispatch("on_press")
+        else:   # "Tag"
+            self.ids["tag_sort"].state = "down"
+            self.ids["folder_sort"].state = "normal"
+            self.ids["tag_sort"].dispatch("on_press")
+        if self.default_view == "Database":
+            self.ids["database_view"].state = "down"
+            self.ids["system_view"].state = "normal"
+            self.ids["database_view"].dispatch("on_press")
+        else:   # "System"
+            self.ids["system_view"].state = "down"
+            self.ids["database_view"].state = "normal"
+            self.ids["system_view"].dispatch("on_press")
         filenav_logger.info("File objects initialized..")
 
     def on_kv_post(self, base_widget):
         self.ids["view_manager"].transition = NoTransition()
-        self.ids["view_manager"].current = "database_files"
-        filenav_logger.info("Set default view on 'database files'...")
-
-    def change_system_view_path(self, new_path):
-        self.system_view_path = new_path
+        # self.ids["view_manager"].current = "database_files"
+        # filenav_logger.info("Set default view on 'database files'...")
 
     def refresh_view(self):
         t = ToggleButtonBehavior.get_widgets("sort_options")

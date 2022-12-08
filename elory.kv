@@ -6,14 +6,8 @@
 
 <OptionsBar@BoxLayout>:
 
-<ActionLogBar@Label>:
-    canvas.before:
-        Color:
-            rgba: 0.3, 0.3, 0.3, 1
-        Rectangle:
-            pos: self.pos
-            size: self.size
-    text: "ActionLogBar: Print useful messages and user actions here"
+<ActionLogBar@BoxLayout>:
+
 
 <RootWidget>:
     orientation: "vertical"
@@ -40,7 +34,7 @@
                 Rectangle:
                     pos: self.pos
                     size: self.size
-            text: "OptionsBar"
+            # text: "OptionsBar"
     BoxLayout:
         size_hint_y: 0.94
         FileNavigationPane:
@@ -73,3 +67,20 @@
     ActionLogBar:
         size_hint_y: 0.04
         size_hint_max_y: 25
+        Label:
+            size_hint: 0.26, 1
+            canvas.before:
+                Color:
+                    rgba: 0.3, 0.3, 0.3, 0.8
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            text: str(root.current_db).split("/")[-1]
+        Label:
+            canvas.before:
+                Color:
+                    rgba: 0.3, 0.3, 0.3, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            text: "ActionLogBar: Print useful messages and user actions here"

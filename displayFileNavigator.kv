@@ -24,20 +24,22 @@
         y: pane_name.y - pane_name.height
         orientation: 'horizontal'
         ToggleButton:
-            id: other_view
+            id: system_view
             text: "System Files"
             group: "view_options"
             on_press: view_manager.current = "system_files"
         ToggleButton:
-            id: default_view                                                            # default view option
+            id: database_view                                                            # default view option
             text: "Database Files"
             group: "view_options"
             on_press: view_manager.current = "database_files"
+
     ScreenManager:
         id: view_manager
         size_hint: 1, None
         height: root.height - view_options_box.height
         top: view_options_box.y
+
         Screen:
             name: "system_files"
             size_hint: 1, 0.95
@@ -69,14 +71,14 @@
                     text: "Sort by : "
                     size_hint: 0.28, 1
                 ToggleButton:
-                    id: other_sort
+                    id: folder_sort
                     text: "Folders"
                     group: "sort_options"
                     allow_no_selection: False
                     size_hint: 0.35, 1
                     on_press: root.sort_by_folder()
                 ToggleButton:
-                    id: default_sort                                                    # default sort option
+                    id: tag_sort                                                    # default sort option
                     text: "Tags"
                     group: "sort_options"
                     allow_no_selection: False
