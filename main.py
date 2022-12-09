@@ -36,7 +36,7 @@ display_logger.parent = elory_logger
 
 def log_uncaught_exception(e_type, e_value, e_traceback):
     elory_logger.critical("System crash...")
-    elory_logger.critical(f"{e_type} {e_value}\n{''.join(format_tb(e_traceback))}")
+    elory_logger.critical(f"{e_type} {e_value}\n{''.join(format_tb(e_traceback))} \n")
     sys.__excepthook__(e_type, e_value, e_traceback)
 
 
@@ -185,13 +185,13 @@ class EloryApp(App):
         self.title = "Elory - The Elephant Memory Database"
 
     def on_stop(self):
-        elory_logger.info("App closed...")
+        elory_logger.info("App closed...\n")
 
     def get_application_config(self, defaultpath='%(appdir)s/%(appname)s.ini'):
         if name == "nt":
             config_file = setup.CONF_DIR + sep + "elory.ini"
         else:
-            config_file = defaultpath
+            config_file = "/home/student/Elory" + sep + "conf" + sep + "elory.ini"
         return super(EloryApp, self).get_application_config(config_file)
     
     def build_config(self, config):
@@ -206,7 +206,7 @@ class EloryApp(App):
                         "systemview_path": setup.USER_DIR,
                         "default_database_path": "",
                         "default_sort_options": "Tag",
-                        "default_view_options": "Database",
+                        "default_view_options": "System",
                     }
                 )
                 config.setdefaults(
@@ -221,13 +221,13 @@ class EloryApp(App):
             else:
                 config.read(self.get_application_config())
         else:       # FIXME not fully implemented, meant to run from source on unix dev machine, with hardcoded vars.
-            if not isfile("elory.ini"):
+            if not isfile(self.get_application_config()):
                 config.setdefaults(
                     "Basic Settings", {
-                        "systemview_path": "/home/student/PycharmProjects/elory",
+                        "systemview_path": "/home/student/",
                         "default_database_path": "",
                         "default_sort_options": "Tag",
-                        "default_view_options": "Database",
+                        "default_view_options": "System",
                     }
                 )
                 config.setdefaults(
@@ -239,7 +239,7 @@ class EloryApp(App):
                     }
                 )
             else:
-                config.read("elory.ini")
+                config.read(self.get_application_config())
 
     def build_settings(self, settings):
         # Define config GUI layout for user management
