@@ -1,3 +1,7 @@
+from os import environ, sep, getcwd, name
+from os.path import expanduser, isfile
+if name == 'net':
+    environ['KIVY_GL_BACKEND'] = 'angle_sdl2'
 from kivy.config import Config
 
 Config.set("graphics", "width", 1200)
@@ -11,17 +15,13 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import DictProperty, ObjectProperty, StringProperty
 from kivy.uix.settings import SettingsWithSidebar
 
-from os import sep, getcwd
-from os.path import expanduser, isfile
-
 from elorydb import Database, db_logger, DatabaseError
 from databaseObjects import TagGroup, File, object_logger
 from modals import SelectSystemObject, Notification, UserInputWithOption
 from displayTagPane import TagPane, tagpane_logger
 from displayFileNavigator import FileNavigationPane, filenav_logger
 from displayFilePane import FileDisplayPane, display_logger
-
-_LOG_FILE = "newlogs.txt"
+import setup
 
 import sys
 from traceback import format_tb
@@ -44,7 +44,7 @@ sys.excepthook = log_uncaught_exception
 
 
 class RootWidget(BoxLayout):
-    APP_DIR = StringProperty()                          # Where app is located
+    DATA_DIR = StringProperty()                         # Where app is located
     USER_DIR = StringProperty()                         # User's Home Directory
 
     current_db = StringProperty()                       # Hold path to current open db file
@@ -54,17 +54,17 @@ class RootWidget(BoxLayout):
     groups = DictProperty({})
     tags = DictProperty({})
 
-    def __init__(self, app_dir, user_dir, default_db, systemview, default_sort, default_view, app_config, **kwargs):
+    def __init__(self, data_dir, user_dir, default_db, systemview, default_sort, default_view, app_config, **kwargs):
         super(RootWidget, self).__init__(**kwargs)
-        self.APP_DIR = app_dir          # App's location and conf files
-        self.USER_DIR = user_dir        # User home directory + Elory's directory
+        self.DATA_DIR = data_dir        # App's location and conf files
+        self.USER_DIR = user_dir        # User home directory
 
         self.ids["file_nav"].system_view_path = systemview
         self.ids["file_nav"].default_sort = default_sort
         self.ids["file_nav"].default_view = default_view
 
         if default_db == "":
-            new_db = self.USER_DIR + sep + "elory"          # default name for a new database
+            new_db = self.DATA_DIR + sep + "elory"          # default name for a new database
             elory_logger.info("No default database set... Attempting to create new default database...")
             try:    # FIXME should probably first try to open, then create.
                 self.db.create_new_db(new_db)
@@ -124,7 +124,7 @@ class RootWidget(BoxLayout):
                 n.open()
 
         # Open modal view and select a db file
-        d = SelectSystemObject(heading="Select Database", submit_call=open_, path=self.APP_DIR, dirselect=False)
+        d = SelectSystemObject(heading="Select Database", submit_call=open_, path=self.DATA_DIR, dirselect=False)
         d.open()
 
     def create_new_db(self):
@@ -140,7 +140,7 @@ class RootWidget(BoxLayout):
                 return
 
             default_values = True if default_values == "down" else False
-            path = self.USER_DIR + sep + new_name
+            path = self.DATA_DIR + sep + new_name
             new_db = self.db.create_new_db(path, default_values)
             elory_logger.info(f"Created new database '{new_name}' ...")
             self.load_database(new_db)
@@ -153,6 +153,14 @@ class RootWidget(BoxLayout):
 class EloryApp(App):
 
     def build(self):
+        log_dir = self.config.get("App Settings", "LOGS_DIR")
+        elory_logger.setLevel(logging.DEBUG)
+        fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+        # handler = logging.StreamHandler()
+        handler = logging.FileHandler(log_dir + sep + "elory_log.txt")
+        handler.setFormatter(fmt)
+        elory_logger.addHandler(handler)
+
         elory_logger.info("App build initialize...")
         self.use_kivy_settings = False                  # Disable user management of Kivy Settings
         self.settings_cls = SettingsWithSidebar         # Select settings layout
@@ -162,49 +170,76 @@ class EloryApp(App):
         default_sort = self.config.get("Basic Settings", "default_sort_options")
         default_view = self.config.get("Basic Settings", "default_view_options")
 
-        app_dir = self.config.get("App Settings", "APP_DIR")
+        data_dir = self.config.get("App Settings", "DATA_DIR")
         user_dir = self.config.get("App Settings", "USER_DIR")
 
-        root = RootWidget(app_dir, user_dir,
+        root = RootWidget(data_dir, user_dir,
                           default_db, systemview, default_sort, default_view, self.config)
 
         elory_logger.info("App build complete...")
         return root
 
     def on_start(self):
-        elory_logger.info("App start...")
+        elory_logger.info(f"App start... running from directory '{self.directory}'")
+        elory_logger.info(f"Platform default data directory: '{self.user_data_dir}'")
         self.title = "Elory - The Elephant Memory Database"
 
     def on_stop(self):
-        # introspect App properties
-        # print("App directory:", self.directory)
-        # print("User Data directory eg. settings.json, prefs etc. :", self.user_data_dir)
         elory_logger.info("App closed...")
 
+    def get_application_config(self, defaultpath='%(appdir)s/%(appname)s.ini'):
+        if name == "nt":
+            config_file = setup.CONF_DIR + sep + "elory.ini"
+        else:
+            config_file = defaultpath
+        return super(EloryApp, self).get_application_config(config_file)
+    
     def build_config(self, config):
-        # Define config defaults
-        # Read current defined configs
-        # Create if not yet created
-        # Fallback to logical defaults if values fail
-        # Otherwise set to defined values
-        self.directory
-        elory_logger.info("Load config...")
-        config.read("elory.ini")
-        # config.setdefaults(
-        #     "Basic Settings", {
-        #         "systemview_path": "/home/student/PycharmProjects/elory",
-        #         "default_database_path": "",
-        #         "default_sort_options": "Tag",
-        #         "default_view_options": "Database",
-        #     }
-        # )
-        # config.setdefaults(
-        #     "App Settings", {
-        #         "APP_DIR": "/home/student/PycharmProjects/elory",     # "/home/student/.elory"
-        #         "USER_DIR": "/home/student/Elory",                    # User's home + Elory's directory
-        #         "SYSTEM": "unix"  # or, win
-        #     }
-        # )
+        if name == "nt":             # This is windows
+            if not setup.dependencies_exist():
+                elory_logger.info("Dependency directories not found... Creating required folders...")
+                setup.setup_dependencies()
+            if not isfile(self.get_application_config()):
+                elory_logger.info("Config not found.. Creating new default config file")
+                config.setdefaults(
+                    "Basic Settings", {
+                        "systemview_path": setup.USER_DIR,
+                        "default_database_path": "",
+                        "default_sort_options": "Tag",
+                        "default_view_options": "Database",
+                    }
+                )
+                config.setdefaults(
+                    "App Settings", {
+                        "DATA_DIR": setup.DATA_DIR,   # "~/AppData/Local/Elory"
+                        "USER_DIR": setup.USER_DIR,  # "~/"
+                        "LOGS_DIR": setup.LOGS_DIR,  # # "~/AppData/Local/Elory/logs"
+                        "SYSTEM": "windows"  # or, win
+                    }
+                )
+                config.update_config(setup.CONF_DIR + sep + "elory.ini")
+            else:
+                config.read(self.get_application_config())
+        else:       # FIXME not fully implemented, meant to run from source on unix dev machine, with hardcoded vars.
+            if not isfile("elory.ini"):
+                config.setdefaults(
+                    "Basic Settings", {
+                        "systemview_path": "/home/student/PycharmProjects/elory",
+                        "default_database_path": "",
+                        "default_sort_options": "Tag",
+                        "default_view_options": "Database",
+                    }
+                )
+                config.setdefaults(
+                    "App Settings", {
+                        "DATA_DIR": "/home/student/Elory",
+                        "USER_DIR": "/home/student/",
+                        "LOGS_DIR": "/home/student/Elory/logs",
+                        "SYSTEM": "unix"
+                    }
+                )
+            else:
+                config.read("elory.ini")
 
     def build_settings(self, settings):
         # Define config GUI layout for user management
@@ -215,15 +250,7 @@ class EloryApp(App):
     def on_config_change(self, config, section, key, value):
         # Respond to changes in config settings
         elory_logger.info("Config updated...")
-        print(config, section, key, value)
 
 
 if __name__ == "__main__":
-    elory_logger.setLevel(logging.DEBUG)
-    fmt = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
-    handler = logging.StreamHandler()
-    # handler = logging.FileHandler(_LOG_FILE)
-    handler.setFormatter(fmt)
-    elory_logger.addHandler(handler)
-    # elory_logger.propagate = False
     EloryApp().run()

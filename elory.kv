@@ -3,6 +3,7 @@
 #: include displayFileNavigator.kv
 #: include displayFilePane.kv
 #: include modals.kv
+#: import sep os.sep
 
 <OptionsBar@BoxLayout>:
 
@@ -75,7 +76,7 @@
                 Rectangle:
                     pos: self.pos
                     size: self.size
-            text: str(root.current_db).split("/")[-1]
+            text: str(root.current_db).split(sep)[-1]
         Label:
             canvas.before:
                 Color:
