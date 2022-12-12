@@ -129,7 +129,7 @@ class Database:
         return True  # All checks passed
 
     @staticmethod
-    def digest(file):
+    def digest(file):       # FIXME this function stalls hard on external files (Linux tested)
         """Return a unique hash code of a given file.
 
         The return must be unique to the file itself, should be platform-agnostic and resilient to meta-data changes.
@@ -149,7 +149,6 @@ class Database:
         h = hashlib.md5()
         b = bytearray(128 * 1024)
         mv = memoryview(b)  # using memoryview, we can slice a buffer without copying it
-
         with open(file, 'rb', buffering=0) as file_obj:
             while n := file_obj.readinto(mv):
                 h.update(mv[:n])
