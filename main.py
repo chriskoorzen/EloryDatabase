@@ -7,7 +7,8 @@ if name == "nt":        # Set suitable provider for Windows users - normal sdl2 
 from kivy.config import Config
 
 Config.set("kivy", "log_enable", 0)
-Config.set("input", "mouse", "disable_multitouch")
+# Config.set("input", "mouse", "disable_multitouch")
+# Config.set("input", "mouse", "multitouch_ondemand")
 Config.set("graphics", "width", 1200)
 Config.set("graphics", "height", 720)
 Config.set("graphics", "resizable", True)
