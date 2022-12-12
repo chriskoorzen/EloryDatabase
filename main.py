@@ -1,12 +1,18 @@
 from os import environ, sep, getcwd, name
-from os.path import expanduser, isfile
-if name == 'net':
+from os.path import expanduser, isfile, join
+environ['KIVY_NO_CONSOLELOG'] = '1'
+if name == "nt":        # Set suitable provider for Windows users - normal sdl2 fails.
     environ['KIVY_GL_BACKEND'] = 'angle_sdl2'
+
 from kivy.config import Config
 
+Config.set("kivy", "log_enable", 0)
+Config.set("input", "mouse", "disable_multitouch")
 Config.set("graphics", "width", 1200)
 Config.set("graphics", "height", 720)
 Config.set("graphics", "resizable", True)
+
+from kivy.resources import resource_add_path, resource_find
 
 from kivy import require as kivy_require
 kivy_require("2.1.0")
@@ -191,7 +197,7 @@ class EloryApp(App):
         if name == "nt":
             config_file = setup.CONF_DIR + sep + "elory.ini"
         else:
-            config_file = "/home/student/Elory" + sep + "conf" + sep + "elory.ini"
+            config_file = "/home/student/Elory" + sep + "conf" + sep + "elory.ini"  # FIXME hardcoded dev variables
         return super(EloryApp, self).get_application_config(config_file)
     
     def build_config(self, config):
@@ -253,4 +259,6 @@ class EloryApp(App):
 
 
 if __name__ == "__main__":
+    if hasattr(sys, '_MEIPASS'):
+        resource_add_path(join(sys._MEIPASS))
     EloryApp().run()
